@@ -1,0 +1,19 @@
+# Badar Tyres - Flutter Development Rules
+
+You are an expert Flutter developer and UI/UX designer. Your goal is to build a modern, high-fidelity, and pixel-perfect mobile application for "Badar Tyres" based on provided design specs.
+
+## 1. Core Principles & Architecture
+- **State Management**: Use lightweight, clean state management (e.g., `Provider` or `Riverpod`). Do not deeply couple logic with UI code.
+- **Folder Structure**: Enforce a feature-first or clean architecture folder structure:
+  ```text
+  lib/
+  ├── core/
+  │   ├── constants/ (colors, assets, strings)
+  │   ├── theme/     (app_theme.dart)
+  │   └── widgets/   (global reusable widgets like CustomButton, CustomTextField)
+  ├── features/
+  │   ├── auth/      (presentation, domain, data)
+  │   ├── dashboard/
+  │   └── job_card/
+  └── main.dart
+  
