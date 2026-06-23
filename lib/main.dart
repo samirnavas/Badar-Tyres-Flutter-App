@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/auth/session_store.dart';
@@ -10,9 +11,11 @@ import 'features/home/presentation/home_shell.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
+  await dotenv.load(fileName: ".env");
+
   await Supabase.initialize(
-    url: 'https://gqdwrtxluxrcrfhtygdf.supabase.co',
-    publishableKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdxZHdydHhsdXhyY3JmaHR5Z2RmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzk5OTYsImV4cCI6MjA5NzcxNTk5Nn0.urcRoMfln8T1TX-KNHqBCuVCeJjYmUw7DUfZERC6TDw',
+    url: dotenv.env['SUPABASE_URL'] ?? '',
+    publishableKey: dotenv.env['SUPABASE_PUBLISHABLE_KEY'] ?? dotenv.env['SUPABASE_ANON_KEY'] ?? '',
   );
   
   await ThemeStore.instance.init();

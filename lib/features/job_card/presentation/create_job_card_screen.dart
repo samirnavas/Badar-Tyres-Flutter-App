@@ -23,7 +23,7 @@ class _CreateJobCardScreenState extends State<CreateJobCardScreen> {
   static const double _gstRate = 0.18;
 
   final JobRepository _repository = JobRepository();
-  List<String> _technicians = const [];
+  List<Map<String, dynamic>> _technicians = const [];
   Map<String, List<String>> _manufacturersMap = const {};
   bool _isSubmitting = false;
 
@@ -140,6 +140,9 @@ class _CreateJobCardScreenState extends State<CreateJobCardScreen> {
       'startingTime': _startingTimeController.text.trim(),
       'remarks': _remarksController.text.trim(),
       'technician': _technician,
+      'technician_id': _technician != null 
+          ? _technicians.firstWhere((t) => t['name'] == _technician)['id']
+          : null,
       'services': _services.map((s) => s.toMap()).toList(),
     };
 
@@ -301,7 +304,7 @@ class _CreateJobCardScreenState extends State<CreateJobCardScreen> {
                   label: 'Assign Technician',
                   hint: 'Technician',
                   value: _technician,
-                  options: _technicians,
+                  options: _technicians.map((t) => t['name'].toString()).toList(),
                   onChanged: (v) => setState(() => _technician = v),
                 ),
               ],

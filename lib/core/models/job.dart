@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'job_status.dart';
 
 /// A billable service / part on a job card.
@@ -17,10 +18,10 @@ class JobService {
   final bool isCompleted;
 
   factory JobService.fromJson(Map<String, dynamic> json) => JobService(
-        id: json['id'] as String? ?? '',
+        id: json['serviceId']?.toString() ?? json['id']?.toString() ?? '',
         name: json['name'] as String? ?? '',
         description: json['description'] as String? ?? '',
-        amount: (json['amount'] as num?)?.toDouble() ?? 0,
+        amount: (json['unitPrice'] as num?)?.toDouble() ?? (json['amount'] as num?)?.toDouble() ?? 0,
         isCompleted: json['is_completed'] as bool? ?? false,
       );
 
@@ -77,27 +78,77 @@ class Job {
   final double gst;
   final double grandTotal;
 
-  factory Job.fromJson(Map<String, dynamic> json) => Job(
-        id: json['id'] as String? ?? '',
-        jobNumber: json['jobNumber'] as String? ?? json['id'] as String? ?? '',
-        customerName: json['customerName'] as String? ?? '',
-        mobile: json['mobile'] as String? ?? '',
-        vehicleModel: json['vehicleModel'] as String? ?? '',
-        vehicleNumber: json['vehicleNumber'] as String? ?? '',
-        status: jobStatusFromName(json['status'] as String?),
-        time: json['time'] as String? ?? '',
-        date: json['date'] as String? ?? '',
-        technician: json['technician'] as String? ?? '',
-        startTime: json['startTime'] as String? ?? '-',
-        expectedEnd: json['expectedEnd'] as String? ?? '-',
-        actualEnd: json['actualEnd'] as String?,
-        delay: json['delay'] as String?,
-        remarks: json['remarks'] as String? ?? '',
-        services: (json['services'] as List<dynamic>? ?? [])
-            .map((e) => JobService.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        subTotal: (json['subTotal'] as num?)?.toDouble() ?? 0,
-        gst: (json['gst'] as num?)?.toDouble() ?? 0,
-        grandTotal: (json['grandTotal'] as num?)?.toDouble() ?? 0,
-      );
+  factory Job.fromJson(Map<String, dynamic> json) {
+    List<dynamic> lineItems = [];
+    if (json['line_items'] is String) {
+      try {
+        lineItems = jsonDecode(json['line_items'] as String) as List<dynamic>;
+      } catch (_) {}
+    } else if (json['line_items'] is List) {
+      lineItems = json['line_items'] as List<dynamic>;
+    }
+
+    Map<String, dynamic>? meta;
+    final List<JobService> parsedServices = [];
+
+    for (var item in lineItems) {
+      if (item is Map<String, dynamic>) {
+        if (item['name'] == '__meta__') {
+          meta = item['_meta'] as Map<String, dynamic>?;
+        } else {
+          parsedServices.add(JobService.fromJson(item));
+        }
+      }
+    }
+
+    final createdAt = json['created_at']?.toString() ?? '';
+    final parsedDate = createdAt.length >= 10 ? createdAt.substring(0, 10) : '';
+    final parsedTime = createdAt.length >= 16 ? createdAt.substring(11, 16) : '';
+
+    return Job(
+      id: json['id']?.toString() ?? '',
+      jobNumber: json['idx']?.toString() ?? json['job_number']?.toString() ?? json['id']?.toString() ?? '',
+      customerName: json['customer_name'] as String? ?? 'Customer',
+      mobile: json['mobile'] as String? ?? '',
+      vehicleModel: json['vehicle_model'] as String? ?? 'Vehicle',
+      vehicleNumber: json['vehicle_number'] as String? ?? '',
+      status: jobStatusFromName(json['status'] as String?),
+      time: parsedTime.isNotEmpty ? parsedTime : (json['time'] as String? ?? ''),
+      date: parsedDate.isNotEmpty ? parsedDate : (json['date'] as String? ?? ''),
+      technician: json['technician'] as String? ?? json['technician_id'] as String? ?? '',
+      startTime: json['start_time'] as String? ?? '-',
+      expectedEnd: json['expected_end'] as String? ?? '-',
+      actualEnd: json['actual_end'] as String?,
+      delay: json['delay'] as String?,
+      remarks: json['remarks'] as String? ?? '',
+      services: parsedServices.isNotEmpty ? parsedServices : ((json['services'] as List<dynamic>? ?? [])
+          .map((e) => JobService.fromJson(e as Map<String, dynamic>))
+          .toList()),
+      subTotal: (meta?['subtotal'] as num?)?.toDouble() ?? (json['sub_total'] as num?)?.toDouble() ?? 0,
+      gst: (meta?['total_tax'] as num?)?.toDouble() ?? (json['gst'] as num?)?.toDouble() ?? 0,
+      grandTotal: (meta?['total_amount'] as num?)?.toDouble() ?? (json['grand_total'] as num?)?.toDouble() ?? 0,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'job_number': jobNumber,
+        'customer_name': customerName,
+        'mobile': mobile,
+        'vehicle_model': vehicleModel,
+        'vehicle_number': vehicleNumber,
+        'status': status.name,
+        'time': time,
+        'date': date,
+        'technician': technician,
+        'start_time': startTime,
+        'expected_end': expectedEnd,
+        'actual_end': actualEnd,
+        'delay': delay,
+        'remarks': remarks,
+        'services': services.map((e) => e.toJson()).toList(),
+        'sub_total': subTotal,
+        'gst': gst,
+        'grand_total': grandTotal,
+      };
 }

@@ -63,26 +63,26 @@ class _LoginScreenState extends State<LoginScreen> {
         _usernameController.text.trim(),
         _passwordController.text,
       );
-      
+
       if (!mounted) return;
-      
+
       if (user.role == 'admin') {
         // Block admin entry
         setState(() => _isLoading = false);
         // We should also sign out from Supabase since they shouldn't be logged in here
         try {
-            await Supabase.instance.client.auth.signOut();
+          await Supabase.instance.client.auth.signOut();
         } catch (_) {}
-        
+
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please use the Web Admin Panel')),
         );
         return;
       }
-      
+
       await SessionStore.instance.save(user, rememberMe: _rememberMe);
-      
+
       if (!mounted) return;
       Navigator.of(
         context,
@@ -149,7 +149,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     flex: 5,
                     child: Center(
                       child: SvgPicture.asset(
-                        'assets/images/badar_logo_white.svg',
+                        'assets/images/full_logo.svg',
                         width: size.width * 0.55,
                         semanticsLabel: 'Badar Tyres',
                       ),

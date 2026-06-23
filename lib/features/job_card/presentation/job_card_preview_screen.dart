@@ -4,6 +4,7 @@ import '../../../core/models/job.dart';
 import '../../../core/repositories/job_repository.dart';
 import '../../../core/theme/theme.dart';
 import '../../../core/widgets/job_list_tile.dart';
+import '../../inspections/presentation/dvi_checklist_screen.dart';
 
 class JobExecutionScreen extends StatefulWidget {
   const JobExecutionScreen({super.key, required this.job});
@@ -176,7 +177,7 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
               AppSpacing.containerPadding,
               AppSpacing.stackLg,
               AppSpacing.containerPadding,
-              120.0, // Space for the bottom block button
+              180.0, // Space for the bottom block buttons
             ),
             children: [
               _buildVehicleHeader(context),
@@ -192,15 +193,40 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
             left: AppSpacing.containerPadding,
             right: AppSpacing.containerPadding,
             bottom: 32,
-            child: ElevatedButton.icon(
-              icon: const Icon(Icons.warning_amber_rounded),
-              label: const Text('FLAG ISSUE / BLOCKED'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: context.colors.errorContainer,
-                foregroundColor: context.colors.onErrorContainer,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-              onPressed: _job.status != JobStatus.blocked ? _flagIssue : null,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_job.status == JobStatus.running) ...[
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.checklist),
+                    label: const Text('PERFORM DIGITAL INSPECTION'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.indigo,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => DviChecklistScreen(job: _job),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: AppSpacing.stackMd),
+                ],
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.warning_amber_rounded),
+                  label: const Text('FLAG ISSUE / BLOCKED'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: context.colors.errorContainer,
+                    foregroundColor: context.colors.onErrorContainer,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  onPressed: _job.status != JobStatus.blocked ? _flagIssue : null,
+                ),
+              ],
             ),
           ),
         ],

@@ -51,10 +51,9 @@ class _TechnicianWorkspaceScreenState extends State<TechnicianWorkspaceScreen> {
           final jobs = snapshot.data ?? [];
           final currentUser = SessionStore.currentUser;
           
-          // Filter jobs: Only jobs assigned to the current technician and in pending/running status
+          // Filter jobs: Only jobs in pending/running status (already filtered by technician_id in repository)
           final myActiveJobs = jobs.where((job) =>
-              job.technician == currentUser?.name &&
-              (job.status == JobStatus.pending || job.status == JobStatus.running)).toList();
+              job.status == JobStatus.pending || job.status == JobStatus.running).toList();
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,

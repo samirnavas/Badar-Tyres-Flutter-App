@@ -55,18 +55,22 @@ class JobRepository {
   }
 
   Future<List<Job>> fetchJobs({String status = 'all', String search = ''}) async {
-    var query = _supabase.from('jobs').select('*, services:invoices(*)').eq('technician_id', _userId);
-    
-    if (status != 'all') {
-      query = query.eq('status', status);
-    }
-    
-    if (search.isNotEmpty) {
-      query = query.ilike('jobNumber', '%$search%'); // Assuming search by jobNumber
-    }
+    try {
+      var query = _supabase.from('jobs').select().eq('technician_id', _userId);
+      
+      if (status != 'all') {
+        query = query.eq('status', status);
+      }
+      
+      if (search.isNotEmpty) {
+        query = query.ilike('job_number', '%$search%');
+      }
 
-    final data = await query;
-    return data.map((e) => Job.fromJson(e)).toList();
+      final data = await query;
+      return data.map((e) => Job.fromJson(e)).toList();
+    } catch (e) {
+      throw Exception('Failed to fetch active jobs. Please check your connection.');
+    }
   }
 
   Future<List<Vehicle>> fetchVehicles() async {
@@ -77,7 +81,7 @@ class JobRepository {
   Future<Job> fetchJob(String id) async {
     final data = await _supabase
         .from('jobs')
-        .select('*, services:invoices(*)')
+        .select()
         .eq('id', id)
         .eq('technician_id', _userId) // Security check
         .single();
@@ -85,18 +89,24 @@ class JobRepository {
   }
 
   Future<void> updateJobStatus(String jobId, String status) async {
-    // Offline-first approach via SyncManager
-    await _syncManager.enqueueJobStatus(jobId, status);
+    try {
+      await _supabase.from('jobs').update({'status': status}).eq('id', jobId);
+    } catch (e) {
+      throw Exception('Failed to update job status. Please check your connection.');
+    }
   }
 
   Future<void> updateServiceStatus(String serviceId, bool isCompleted) async {
-    // Offline-first approach via SyncManager
-    await _syncManager.enqueueServiceStatus(serviceId, isCompleted);
+    try {
+      await _supabase.from('invoices').update({'is_completed': isCompleted}).eq('id', serviceId);
+    } catch (e) {
+      throw Exception('Failed to update service status. Please check your connection.');
+    }
   }
 
-  Future<List<String>> fetchTechnicians() async {
-    final data = await _supabase.from('users').select('name').eq('role', 'technician');
-    return data.map((e) => e['name'].toString()).toList();
+  Future<List<Map<String, dynamic>>> fetchTechnicians() async {
+    final data = await _supabase.from('users').select('id, name').eq('role', 'technician');
+    return data;
   }
 
   Future<Map<String, List<String>>> fetchManufacturers() async {
@@ -112,8 +122,8 @@ class JobRepository {
   }
 
   Future<Job> createJob(Map<String, dynamic> payload) async {
-    // Enforce technician_id check on creation
-    payload['technician_id'] = _userId;
+    // Enforce technician_id check on creation if not provided
+    payload['technician_id'] ??= _userId;
     
     final data = await _supabase
         .from('jobs')
