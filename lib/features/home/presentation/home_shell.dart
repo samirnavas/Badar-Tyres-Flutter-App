@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/theme.dart';
 import '../../dashboard/presentation/dashboard_screen.dart';
 import '../../job_card/presentation/create_job_card_screen.dart';
+import '../../../core/auth/session_store.dart';
 import 'dashboard_overview_screen.dart';
 import 'more_screen.dart';
 import 'vehicles_screen.dart';
@@ -26,9 +27,19 @@ class _HomeShellState extends State<HomeShell> {
 
   /// The four navigable destinations, in bottom-bar order. The central
   /// "Create Job" button (nav index 2) is an action, not a destination.
-  static const _navOrder = [0, 1, 3, 4];
+  /// "Create Job" button (nav index 2) is an action, not a destination.
+  static const _adminNavOrder = [0, 1, 3, 4];
+  static const _techNavOrder = [0, 1];
 
-  int get _stackIndex => _navOrder.indexOf(_navIndex);
+  List<int> get _navOrder {
+    final isTech = SessionStore.currentUser?.role == 'Technician';
+    return isTech ? _techNavOrder : _adminNavOrder;
+  }
+
+  int get _stackIndex {
+    final index = _navOrder.indexOf(_navIndex);
+    return index == -1 ? 0 : index;
+  }
 
   void _onNavTap(int navIndex) {
     if (navIndex == _navIndex) return;
@@ -49,6 +60,8 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
+    final isTech = SessionStore.currentUser?.role == 'Technician';
+
     return PopScope(
       canPop: _navIndex == 0,
       onPopInvokedWithResult: (didPop, result) {
@@ -65,12 +78,13 @@ class _HomeShellState extends State<HomeShell> {
               onViewJobs: () => _onNavTap(1),
             ),
             DashboardScreen(refreshTick: _jobsRefreshTick),
-            const VehiclesScreen(),
-            const MoreScreen(),
+            if (!isTech) const VehiclesScreen(),
+            if (!isTech) const MoreScreen(),
           ],
         ),
         bottomNavigationBar: _AppBottomBar(
           currentIndex: _navIndex,
+          isTech: isTech,
           onTap: _onNavTap,
           onCreateJob: _openCreateJob,
         ),
@@ -86,11 +100,13 @@ class _HomeShellState extends State<HomeShell> {
 class _AppBottomBar extends StatelessWidget {
   const _AppBottomBar({
     required this.currentIndex,
+    required this.isTech,
     required this.onTap,
     required this.onCreateJob,
   });
 
   final int currentIndex;
+  final bool isTech;
   final ValueChanged<int> onTap;
   final VoidCallback onCreateJob;
 
@@ -116,7 +132,7 @@ class _AppBottomBar extends StatelessWidget {
                   _NavItem(
                     icon: Icons.home_outlined,
                     activeIcon: Icons.home_rounded,
-                    label: 'Dashboard',
+                    label: isTech ? 'Workspace' : 'Dashboard',
                     selected: currentIndex == 0,
                     onTap: () => onTap(0),
                   ),
@@ -127,29 +143,32 @@ class _AppBottomBar extends StatelessWidget {
                     selected: currentIndex == 1,
                     onTap: () => onTap(1),
                   ),
-                  const Spacer(),
-                  _NavItem(
-                    icon: Icons.directions_car_outlined,
-                    activeIcon: Icons.directions_car_rounded,
-                    label: 'Vehicles',
-                    selected: currentIndex == 3,
-                    onTap: () => onTap(3),
-                  ),
-                  _NavItem(
-                    icon: Icons.menu,
-                    activeIcon: Icons.menu_open_rounded,
-                    label: 'More',
-                    selected: currentIndex == 4,
-                    onTap: () => onTap(4),
-                  ),
+                  if (!isTech) ...[
+                    const Spacer(),
+                    _NavItem(
+                      icon: Icons.directions_car_outlined,
+                      activeIcon: Icons.directions_car_rounded,
+                      label: 'Vehicles',
+                      selected: currentIndex == 3,
+                      onTap: () => onTap(3),
+                    ),
+                    _NavItem(
+                      icon: Icons.menu,
+                      activeIcon: Icons.menu_open_rounded,
+                      label: 'More',
+                      selected: currentIndex == 4,
+                      onTap: () => onTap(4),
+                    ),
+                  ],
                 ],
               ),
-              Positioned(
-                top: -18,
-                left: 0,
-                right: 0,
-                child: Center(child: _CreateJobButton(onTap: onCreateJob)),
-              ),
+              if (!isTech)
+                Positioned(
+                  top: -18,
+                  left: 0,
+                  right: 0,
+                  child: Center(child: _CreateJobButton(onTap: onCreateJob)),
+                ),
             ],
           ),
         ),

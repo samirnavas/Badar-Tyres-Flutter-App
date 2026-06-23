@@ -16,7 +16,7 @@ Future<void> main() async {
   );
   
   await ThemeStore.instance.init();
-  final rememberedUser = await SessionStore.instance.currentUser();
+  final rememberedUser = await SessionStore.instance.loadCurrentUser();
   runApp(MyApp(startLoggedIn: rememberedUser != null));
 }
 

@@ -74,7 +74,7 @@ class SyncManager {
               .eq('technician_id', _userId);
         } else if (type == 'service_status') {
           await _supabase
-              .from('job_services')
+              .from('invoices')
               .update({'is_completed': value})
               .eq('id', id);
         }

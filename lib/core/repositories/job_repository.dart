@@ -55,7 +55,7 @@ class JobRepository {
   }
 
   Future<List<Job>> fetchJobs({String status = 'all', String search = ''}) async {
-    var query = _supabase.from('jobs').select('*, services:job_services(*)').eq('technician_id', _userId);
+    var query = _supabase.from('jobs').select('*, services:invoices(*)').eq('technician_id', _userId);
     
     if (status != 'all') {
       query = query.eq('status', status);
@@ -77,7 +77,7 @@ class JobRepository {
   Future<Job> fetchJob(String id) async {
     final data = await _supabase
         .from('jobs')
-        .select('*, services:job_services(*)')
+        .select('*, services:invoices(*)')
         .eq('id', id)
         .eq('technician_id', _userId) // Security check
         .single();

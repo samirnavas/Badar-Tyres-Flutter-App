@@ -20,6 +20,9 @@ class SessionStore {
   static const _kRole = 'auth_user_role';
   static const _kToken = 'auth_token';
 
+  static AuthUser? _cachedUser;
+  static AuthUser? get currentUser => _cachedUser;
+
   /// Whether the last sign-in opted into being remembered.
   Future<bool> get rememberMe async {
     final prefs = await SharedPreferences.getInstance();
@@ -37,6 +40,7 @@ class SessionStore {
   /// only when [rememberMe] is true; otherwise we drop any prior session but
   /// still remember the username.
   Future<void> save(AuthUser user, {required bool rememberMe}) async {
+    _cachedUser = user;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_kRemember, rememberMe);
     await prefs.setString(_kUsername, user.username);
@@ -52,24 +56,29 @@ class SessionStore {
 
   /// The remembered user, or null if "remember me" wasn't active at last login.
   /// Used at startup to skip the login screen.
-  Future<AuthUser?> currentUser() async {
+  Future<AuthUser?> loadCurrentUser() async {
+    if (_cachedUser != null) return _cachedUser;
+    
     final prefs = await SharedPreferences.getInstance();
     if (!(prefs.getBool(_kRemember) ?? false)) return null;
     final token = prefs.getString(_kToken);
     final username = prefs.getString(_kUsername);
     if (token == null || username == null) return null;
-    return AuthUser(
+    
+    _cachedUser = AuthUser(
       id: prefs.getString(_kId) ?? '',
       name: prefs.getString(_kName) ?? '',
       username: username,
       role: prefs.getString(_kRole) ?? '',
       token: token,
     );
+    return _cachedUser;
   }
 
   /// Ends the active session. The saved username is kept so the next login can
   /// pre-fill it, but auto-login is disabled until the user opts in again.
   Future<void> logout() async {
+    _cachedUser = null;
     final prefs = await SharedPreferences.getInstance();
     await _clearSession(prefs);
     await prefs.setBool(_kRemember, false);
