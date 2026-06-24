@@ -87,7 +87,13 @@ class SettingsScreen extends StatelessWidget {
                   const SizedBox(height: AppSpacing.stackMd),
                   _buildProfileRow(context, Icons.person_outline, 'Username', user.username),
                   const SizedBox(height: AppSpacing.stackMd),
-                  _buildProfileRow(context, Icons.badge_outlined, 'Employee ID', user.id),
+                  _buildProfileRow(
+                    context,
+                    Icons.badge_outlined,
+                    'Employee ID',
+                    _displayEmployeeId(user.id),
+                    tooltip: user.id,
+                  ),
                 ],
               ),
             ),
@@ -124,24 +130,49 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildProfileRow(BuildContext context, IconData icon, String label, String value) {
+  String _displayEmployeeId(String id) {
+    if (id.length >= 36 && id.contains('-')) {
+      return '#${id.substring(0, 8).toUpperCase()}';
+    }
+    return id;
+  }
+
+  Widget _buildProfileRow(
+    BuildContext context,
+    IconData icon,
+    String label,
+    String value, {
+    String? tooltip,
+  }) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(icon, color: context.colors.secondary, size: 20),
         const SizedBox(width: AppSpacing.gutter),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: context.typography.labelSm.copyWith(color: context.colors.secondary),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              value,
-              style: context.typography.bodyMd.copyWith(fontWeight: FontWeight.w500),
-            ),
-          ],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: context.typography.labelSm.copyWith(
+                  color: context.colors.secondary,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Tooltip(
+                message: tooltip ?? value,
+                child: Text(
+                  value,
+                  style: context.typography.bodyMd.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );

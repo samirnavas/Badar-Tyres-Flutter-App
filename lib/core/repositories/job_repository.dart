@@ -64,7 +64,7 @@ class JobRepository {
     try {
       var query = _supabase
           .from('jobs')
-          .select('*, vehicles(*)')
+          .select('*, vehicles(*, customers(first_name, last_name, phone)), bays(name)')
           .eq('technician_id', _userId);
 
       if (status != 'all') {
@@ -109,7 +109,7 @@ class JobRepository {
   Future<Job> fetchJob(String id) async {
     final data = await _supabase
         .from('jobs')
-        .select('*, vehicles(*)')
+        .select('*, vehicles(*, customers(first_name, last_name, phone)), bays(name)')
         .eq('id', id)
         .eq('technician_id', _userId)
         .single();
@@ -118,25 +118,23 @@ class JobRepository {
 
   Future<void> updateJobStatus(
     String jobId,
-    String status, {
+    JobStatus newStatus, {
     String? pauseReason,
     JobHistoryEntry? historyEntry,
   }) async {
-    final parsedStatus = jobStatusFromName(status);
-
     await _syncManager.updateJobInCache(jobId, (job) {
       final updatedHistory = historyEntry == null
           ? job.history
           : [...job.history, historyEntry];
-      return job.copyWith(status: parsedStatus, history: updatedHistory);
+      return job.copyWith(status: newStatus, history: updatedHistory);
     });
 
     try {
-      await _syncManager.enqueueJobStatus(
-        jobId,
-        status,
-        pauseReason: pauseReason,
-      );
+      await _supabase
+          .from('jobs')
+          .update({'status': newStatus.supabaseName})
+          .eq('id', jobId)
+          .eq('technician_id', _userId);
     } catch (e) {
       throw Exception('Failed to update job status: $e');
     }
@@ -172,7 +170,7 @@ class JobRepository {
   }
 
   Future<void> startJob(String jobId) async {
-    await updateJobStatus(jobId, JobStatus.inProgress.apiName);
+    await updateJobStatus(jobId, JobStatus.inProgress);
   }
 
   Future<void> pauseJob(
@@ -182,7 +180,7 @@ class JobRepository {
   }) async {
     await updateJobStatus(
       jobId,
-      reasonStatus.apiName,
+      reasonStatus,
       pauseReason: pauseReason,
       historyEntry: pauseReason == null
           ? null
@@ -195,7 +193,7 @@ class JobRepository {
   }
 
   Future<void> completeJob(String jobId) async {
-    await updateJobStatus(jobId, JobStatus.completed.apiName);
+    await updateJobStatus(jobId, JobStatus.completed);
   }
 
   Future<void> updateServiceStatus(String serviceId, bool isCompleted) async {

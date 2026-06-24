@@ -9,13 +9,14 @@ enum JobStatus { pending, inProgress, onHold, completed }
 /// Parses an API status string into a [JobStatus].
 JobStatus jobStatusFromName(String? name) => switch (name?.toLowerCase()) {
       'pending' || 'approved' || 'estimate' => JobStatus.pending,
-      'in_progress' || 'running' => JobStatus.inProgress,
+      'in_progress' || 'in progress' || 'running' => JobStatus.inProgress,
       'on_hold' ||
+      'on hold' ||
       'delayed' ||
       'awaiting_parts' ||
       'blocked' =>
         JobStatus.onHold,
-      'completed' => JobStatus.completed,
+      'completed' || 'closed' => JobStatus.completed,
       _ => JobStatus.pending,
     };
 
@@ -25,6 +26,14 @@ extension JobStatusApi on JobStatus {
         JobStatus.inProgress => 'in_progress',
         JobStatus.onHold => 'on_hold',
         JobStatus.completed => 'completed',
+      };
+
+  /// Values stored in the Supabase `jobs.status` column.
+  String get supabaseName => switch (this) {
+        JobStatus.pending => 'Approved',
+        JobStatus.inProgress => 'In Progress',
+        JobStatus.onHold => 'Approved',
+        JobStatus.completed => 'Completed',
       };
 }
 
@@ -141,6 +150,7 @@ class Job {
     this.technicianId,
     this.vehicleId,
     this.bayId,
+    this.bayName,
     this.vehicle,
     required this.jobNumber,
     required this.customerName,
@@ -169,6 +179,7 @@ class Job {
   final String? technicianId;
   final String? vehicleId;
   final String? bayId;
+  final String? bayName;
   final Vehicle? vehicle;
   final String jobNumber;
   final String customerName;
@@ -225,6 +236,12 @@ class Job {
         ? Vehicle.fromJson(Map<String, dynamic>.from(json['vehicles'] as Map))
         : (json['vehicle'] != null ? Vehicle.fromJson(Map<String, dynamic>.from(json['vehicle'] as Map)) : null);
 
+    final jobMake = json['vehicle_make'] as String? ?? '';
+    final jobModel = json['vehicle_model'] as String? ?? '';
+    final denormalizedModel = [jobMake, jobModel]
+        .where((part) => part.trim().isNotEmpty)
+        .join(' ');
+
     final statusStr = json['status']?.toString() ?? 'pending';
 
     final parsedSteps = _parseSteps(json, parsedServices);
@@ -240,18 +257,40 @@ class Job {
       parsedTechnician = SessionStore.currentUser?.name ?? parsedTechnician;
     }
 
+    final bays = json['bays'];
+    final parsedBayName = bays is Map
+        ? bays['name'] as String?
+        : json['bay_name'] as String? ?? json['bayName'] as String?;
+
     return Job(
       id: json['id']?.toString() ?? '',
       technicianId: json['technician_id']?.toString() ?? json['technicianId']?.toString(),
       vehicleId: json['vehicle_id']?.toString() ?? json['vehicleId']?.toString() ?? '',
       bayId: json['bay_id']?.toString() ?? json['bayId']?.toString(),
+      bayName: parsedBayName,
       vehicle: vehicle,
       createdAt: createdAtDate,
       jobNumber: rawJobNumber,
-      customerName: json['customer_name'] as String? ?? json['customerName'] as String? ?? vehicle?.customerName ?? 'Customer',
-      mobile: json['mobile'] as String? ?? json['contact'] as String? ?? vehicle?.mobile ?? '',
-      vehicleModel: json['vehicle_model'] as String? ?? json['model'] as String? ?? vehicle?.vehicleModel ?? 'Unknown Vehicle',
-      vehicleNumber: json['vehicle_number'] as String? ?? json['vehicleReg'] as String? ?? vehicle?.vehicleNumber ?? 'N/A',
+      customerName: json['customer_name'] as String? ??
+          json['customerName'] as String? ??
+          vehicle?.customerName ??
+          'Customer',
+      mobile: json['customer_phone'] as String? ??
+          json['mobile'] as String? ??
+          json['contact'] as String? ??
+          vehicle?.mobile ??
+          '',
+      vehicleModel: denormalizedModel.isNotEmpty
+          ? denormalizedModel
+          : (json['vehicle_model'] as String? ??
+              json['model'] as String? ??
+              vehicle?.vehicleModel ??
+              'Unknown Vehicle'),
+      vehicleNumber: json['plate_number'] as String? ??
+          json['vehicle_number'] as String? ??
+          json['vehicleReg'] as String? ??
+          vehicle?.vehicleNumber ??
+          'N/A',
       status: jobStatusFromName(statusStr),
       time: parsedTime.isNotEmpty ? parsedTime : (json['time'] as String? ?? json['startingTime'] as String? ?? ''),
       date: parsedDate.isNotEmpty ? parsedDate : (json['date'] as String? ?? ''),
@@ -277,6 +316,7 @@ class Job {
     String? technicianId,
     String? vehicleId,
     String? bayId,
+    String? bayName,
     Vehicle? vehicle,
     String? jobNumber,
     String? customerName,
@@ -305,6 +345,7 @@ class Job {
       technicianId: technicianId ?? this.technicianId,
       vehicleId: vehicleId ?? this.vehicleId,
       bayId: bayId ?? this.bayId,
+      bayName: bayName ?? this.bayName,
       vehicle: vehicle ?? this.vehicle,
       jobNumber: jobNumber ?? this.jobNumber,
       customerName: customerName ?? this.customerName,

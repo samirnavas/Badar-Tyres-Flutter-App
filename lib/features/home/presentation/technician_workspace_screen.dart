@@ -79,7 +79,7 @@ class _TechnicianWorkspaceScreenState extends State<TechnicianWorkspaceScreen> {
       } else if (newStatus == JobStatus.onHold) {
         await _repository.pauseJob(job.id, newStatus);
       } else {
-        await _repository.updateJobStatus(job.id, newStatus.apiName);
+        await _repository.updateJobStatus(job.id, newStatus);
       }
     } catch (e) {
       // Revert on failure

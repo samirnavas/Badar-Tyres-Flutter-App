@@ -46,77 +46,78 @@ class WorkspaceHeader extends StatelessWidget {
         ),
         child: SizedBox(
           height: kToolbarHeight,
-          child: Row(
+          child: Stack(
+            alignment: Alignment.center,
             children: [
-              SvgPicture.asset(
-                logoAsset,
-                height: 35,
-                semanticsLabel: 'Badar Tyres',
-              ),
-              const SizedBox(width: AppSpacing.gutter),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 25),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Hi, $_firstName',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: context.typography.titleSm.copyWith(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          height: 1.2,
-                        ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Hi, $_firstName',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.typography.titleSm.copyWith(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        height: 1.2,
                       ),
-                      Text(
-                        _todayLabel,
-                        style: context.typography.labelSm.copyWith(
-                          fontSize: 11,
-                          letterSpacing: 0,
-                          fontWeight: FontWeight.w400,
-                          height: 1.2,
-                          color: colors.onSurfaceVariant,
-                        ),
+                    ),
+                    Text(
+                      _todayLabel,
+                      style: context.typography.labelSm.copyWith(
+                        fontSize: 11,
+                        letterSpacing: 0,
+                        fontWeight: FontWeight.w400,
+                        height: 1.2,
+                        color: colors.onSurfaceVariant,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    onPressed: onSyncTap,
-                    tooltip: 'Sync status',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 48,
-                      minHeight: 48,
+              SvgPicture.asset(
+                logoAsset,
+                height: 25,
+                semanticsLabel: 'Badar Tyres',
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      onPressed: onSyncTap,
+                      tooltip: 'Sync status',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 48,
+                        minHeight: 48,
+                      ),
+                      icon: Icon(
+                        Icons.cloud_outlined,
+                        size: 22,
+                        color: colors.onSurface,
+                      ),
                     ),
-                    icon: Icon(
-                      Icons.cloud_outlined,
-                      size: 22,
-                      color: colors.onSurface,
+                    IconButton(
+                      onPressed: onNotificationsTap,
+                      tooltip: 'Notifications',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 48,
+                        minHeight: 48,
+                      ),
+                      icon: Icon(
+                        Icons.notifications_none_rounded,
+                        size: 22,
+                        color: colors.onSurface,
+                      ),
                     ),
-                  ),
-                  IconButton(
-                    onPressed: onNotificationsTap,
-                    tooltip: 'Notifications',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 48,
-                      minHeight: 48,
-                    ),
-                    icon: Icon(
-                      Icons.notifications_none_rounded,
-                      size: 22,
-                      color: colors.onSurface,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),

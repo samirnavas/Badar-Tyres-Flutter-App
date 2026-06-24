@@ -2,13 +2,11 @@ import 'dart:convert';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../api/api_client.dart';
 import '../models/job.dart';
 import '../models/inspection.dart';
 
 class SyncManager {
   final _supabase = Supabase.instance.client;
-  final _apiClient = ApiClient();
   
   Box get _jobCache => Hive.box('job_cache');
   Box get _queue => Hive.box('mutation_queue');
@@ -98,7 +96,7 @@ class SyncManager {
     await _enqueue({
       'type': 'dvi_inspection',
       'id': report.jobId,
-      'value': report.toJson(),
+      'value': report.toSupabaseRow(),
     });
   }
 
@@ -126,38 +124,110 @@ class SyncManager {
         final value = payload['value'];
 
         if (type == 'job_status') {
-          final pauseReason = payload['pause_reason'];
-          final body = {
-            'id': id,
-            'technician_id': _userId,
-            'status': value,
-            'pause_reason': ?pauseReason,
-          };
-          await _apiClient.postJson('sync/job_status', body);
-          await _apiClient.patchJson('jobs/$id', {
-            'status': value,
-            'pause_reason': ?pauseReason,
-          });
+          final status = jobStatusFromName(value as String?);
+          await _supabase
+              .from('jobs')
+              .update({'status': status.supabaseName})
+              .eq('id', id)
+              .eq('technician_id', _userId);
         } else if (type == 'job_step') {
-          final stepId = payload['step_id'];
-          await _apiClient.patchJson('jobs/$id/steps/$stepId', {
-            'is_completed': value,
-          });
+          await _updateJobStepInLineItems(
+            jobId: id as String,
+            stepId: payload['step_id'] as String,
+            isCompleted: value as bool,
+          );
         } else if (type == 'service_status') {
-          await _apiClient.postJson('sync/service_status', {
-             'id': id,
-             'is_completed': value,
-          });
+          await _updateServiceInLineItems(
+            serviceId: id as String,
+            isCompleted: value as bool,
+          );
         } else if (type == 'dvi_inspection') {
-          await _apiClient.postJson('sync/dvi_inspection', value);
+          final row = Map<String, dynamic>.from(value as Map);
+          row['technician_id'] ??= _userId;
+          await _supabase.from('inspections').insert(row);
         }
         
         // If successful, remove from queue
         await _queue.delete(key);
       } catch (e) {
         // If it fails due to network/server, keep it in queue for next time.
-        // It will just continue and try the next item (or fail as well).
       }
     }
+  }
+
+  Future<void> _updateJobStepInLineItems({
+    required String jobId,
+    required String stepId,
+    required bool isCompleted,
+  }) async {
+    final row = await _supabase
+        .from('jobs')
+        .select('line_items')
+        .eq('id', jobId)
+        .eq('technician_id', _userId)
+        .single();
+
+    final updated = _toggleCompletionInLineItems(
+      row['line_items'],
+      matchId: stepId,
+      isCompleted: isCompleted,
+    );
+    if (updated == null) return;
+
+    await _supabase
+        .from('jobs')
+        .update({'line_items': updated})
+        .eq('id', jobId)
+        .eq('technician_id', _userId);
+  }
+
+  Future<void> _updateServiceInLineItems({
+    required String serviceId,
+    required bool isCompleted,
+  }) async {
+    final rows = await _supabase
+        .from('jobs')
+        .select('id, line_items')
+        .eq('technician_id', _userId);
+
+    for (final row in rows) {
+      final updated = _toggleCompletionInLineItems(
+        row['line_items'],
+        matchId: serviceId,
+        isCompleted: isCompleted,
+        matchKey: 'serviceId',
+      );
+      if (updated == null) continue;
+
+      await _supabase
+          .from('jobs')
+          .update({'line_items': updated})
+          .eq('id', row['id'])
+          .eq('technician_id', _userId);
+      return;
+    }
+  }
+
+  List<Map<String, dynamic>>? _toggleCompletionInLineItems(
+    dynamic rawLineItems, {
+    required String matchId,
+    required bool isCompleted,
+    String matchKey = 'id',
+  }) {
+    if (rawLineItems is! List) return null;
+
+    var changed = false;
+    final items = rawLineItems.map((entry) {
+      final item = Map<String, dynamic>.from(entry as Map);
+      if (item['name'] == '__meta__') return item;
+
+      final candidate = item[matchKey]?.toString() ?? item['id']?.toString();
+      if (candidate != matchId) return item;
+
+      changed = true;
+      return {...item, 'is_completed': isCompleted};
+    }).toList();
+
+    return changed ? items : null;
   }
 }

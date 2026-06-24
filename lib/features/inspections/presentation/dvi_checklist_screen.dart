@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -21,45 +23,84 @@ class DviChecklistScreen extends StatefulWidget {
 class _DviChecklistScreenState extends State<DviChecklistScreen> {
   final InspectionRepository _repository = InspectionRepository();
   final ImagePicker _picker = ImagePicker();
-  bool _isSubmitting = false;
+  bool _isCompleting = false;
 
   late List<InspectionItem> _items;
+  Timer? _notesDebounce;
+
+  bool get _allItemsChecked => _items.every((item) => item.isChecked);
 
   @override
   void initState() {
     super.initState();
-    // Initialize default items
     _items = [
       'Front Tyres',
       'Rear Tyres',
       'Brake Pads',
       'Battery',
       'Oil Level',
-    ].map((system) => InspectionItem(
-          system: system,
-          condition: 'Green',
-          notes: '',
-        )).toList();
+    ]
+        .map(
+          (system) => InspectionItem(
+            system: system,
+            condition: 'Pending',
+            notes: '',
+          ),
+        )
+        .toList();
+  }
+
+  @override
+  void dispose() {
+    _notesDebounce?.cancel();
+    super.dispose();
+  }
+
+  InspectionReport _buildReport({required String status}) {
+    return InspectionReport(
+      jobId: widget.job.id,
+      technicianId: widget.job.technicianId ?? '',
+      vehicleId: widget.job.vehicleId ?? '',
+      status: status,
+      items: _items,
+    );
+  }
+
+  void _autoSaveDraft() {
+    final report = _buildReport(status: 'Draft');
+    unawaited(
+      _repository.saveInspectionReport(report.jobId, report).catchError((Object e) {
+        if (kDebugMode) {
+          debugPrint('Silent inspection auto-save failed: $e');
+        }
+      }),
+    );
+  }
+
+  void _applyItemUpdate(int index, InspectionItem updated) {
+    setState(() => _items[index] = updated);
+    _autoSaveDraft();
+  }
+
+  void _toggleChecked(int index, bool? value) {
+    if (value == null) return;
+    _applyItemUpdate(index, _items[index].copyWith(isChecked: value));
   }
 
   void _updateCondition(int index, String condition) {
-    setState(() {
-      _items[index] = InspectionItem(
-        system: _items[index].system,
+    _applyItemUpdate(
+      index,
+      _items[index].copyWith(
         condition: condition,
-        notes: _items[index].notes,
-        photoUrls: _items[index].photoUrls,
-      );
-    });
+        isChecked: true,
+      ),
+    );
   }
 
   void _updateNotes(int index, String notes) {
-    _items[index] = InspectionItem(
-      system: _items[index].system,
-      condition: _items[index].condition,
-      notes: notes,
-      photoUrls: _items[index].photoUrls,
-    );
+    setState(() => _items[index] = _items[index].copyWith(notes: notes));
+    _notesDebounce?.cancel();
+    _notesDebounce = Timer(const Duration(milliseconds: 500), _autoSaveDraft);
   }
 
   Future<void> _captureImage(int index) async {
@@ -69,15 +110,15 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
         imageQuality: 50,
       );
       if (image != null) {
-        setState(() {
-          final updatedUrls = List<String>.from(_items[index].photoUrls)..add(image.path);
-          _items[index] = InspectionItem(
-            system: _items[index].system,
-            condition: _items[index].condition,
-            notes: _items[index].notes,
+        final updatedUrls = List<String>.from(_items[index].photoUrls)
+          ..add(image.path);
+        _applyItemUpdate(
+          index,
+          _items[index].copyWith(
             photoUrls: updatedUrls,
-          );
-        });
+            isChecked: true,
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -89,44 +130,51 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
   }
 
   void _removeImage(int itemIndex, int photoIndex) {
-    setState(() {
-      final updatedUrls = List<String>.from(_items[itemIndex].photoUrls)..removeAt(photoIndex);
-      _items[itemIndex] = InspectionItem(
-        system: _items[itemIndex].system,
-        condition: _items[itemIndex].condition,
-        notes: _items[itemIndex].notes,
-        photoUrls: updatedUrls,
-      );
-    });
+    final updatedUrls = List<String>.from(_items[itemIndex].photoUrls)
+      ..removeAt(photoIndex);
+    _applyItemUpdate(
+      itemIndex,
+      _items[itemIndex].copyWith(photoUrls: updatedUrls),
+    );
   }
 
-  Future<void> _submitReport() async {
-    setState(() => _isSubmitting = true);
+  Future<void> _completeInspection() async {
+    if (!_allItemsChecked) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please check every inspection item before completing.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
-    final report = InspectionReport(
-      jobId: widget.job.id,
-      technicianId: widget.job.technician, // using technician name/id available from Job
-      vehicleId: widget.job.vehicleNumber, // simplified mapping
-      status: 'Submitted',
-      items: _items,
-    );
+    setState(() => _isCompleting = true);
+
+    final report = _buildReport(status: 'Submitted');
 
     try {
-      final success = await _repository.submitInspection(report);
-      if (success && mounted) {
+      await _repository.saveInspectionReport(report.jobId, report);
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Inspection report submitted successfully!')),
+          SnackBar(
+            content: const Text('Inspection completed successfully.'),
+            backgroundColor: AppStatusColors.completed,
+          ),
         );
         Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to submit: $e')),
+          const SnackBar(
+            content: Text('Failed to update database. Please check connection.'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
-      if (mounted) setState(() => _isSubmitting = false);
+      if (mounted) setState(() => _isCompleting = false);
     }
   }
 
@@ -146,7 +194,7 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
           AppSpacing.containerPadding,
           AppSpacing.stackMd,
           AppSpacing.containerPadding,
-          100.0, // Space for bottom button
+          100.0,
         ),
         itemCount: _items.length,
         itemBuilder: (context, index) {
@@ -157,17 +205,55 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
             decoration: BoxDecoration(
               color: context.colors.surfaceContainerLow,
               borderRadius: AppRadius.brLg,
-              border: Border.all(color: context.colors.outlineVariant),
+              border: Border.all(
+                color: item.isChecked
+                    ? context.colors.primary.withValues(alpha: 0.4)
+                    : context.colors.outlineVariant,
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  item.system,
-                  style: context.typography.titleSm.copyWith(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                  ),
+                Row(
+                  children: [
+                    Checkbox(
+                      value: item.isChecked,
+                      onChanged: (value) => _toggleChecked(index, value),
+                      activeColor: context.colors.primary,
+                      checkColor: context.colors.onPrimary,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    Expanded(
+                      child: Text(
+                        item.system,
+                        style: context.typography.titleSm.copyWith(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                      ),
+                    ),
+                    if (item.condition != 'Pending')
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _conditionColor(item.condition)
+                              .withValues(alpha: 0.15),
+                          borderRadius: AppRadius.brFull,
+                        ),
+                        child: Text(
+                          item.condition,
+                          style: context.typography.labelSm.copyWith(
+                            color: _conditionColor(item.condition),
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
                 const SizedBox(height: AppSpacing.stackMd),
                 Row(
@@ -176,8 +262,8 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
                       child: _ConditionButton(
                         label: 'Good',
                         color: AppStatusColors.running,
-                        isSelected: item.condition == 'Green',
-                        onTap: () => _updateCondition(index, 'Green'),
+                        isSelected: item.condition == 'Good',
+                        onTap: () => _updateCondition(index, 'Good'),
                       ),
                     ),
                     const SizedBox(width: AppSpacing.stackSm),
@@ -185,17 +271,17 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
                       child: _ConditionButton(
                         label: 'Monitor',
                         color: AppStatusColors.pending,
-                        isSelected: item.condition == 'Yellow',
-                        onTap: () => _updateCondition(index, 'Yellow'),
+                        isSelected: item.condition == 'Monitor',
+                        onTap: () => _updateCondition(index, 'Monitor'),
                       ),
                     ),
                     const SizedBox(width: AppSpacing.stackSm),
                     Expanded(
                       child: _ConditionButton(
-                        label: 'Action',
+                        label: 'Replace',
                         color: AppStatusColors.delayed,
-                        isSelected: item.condition == 'Red',
-                        onTap: () => _updateCondition(index, 'Red'),
+                        isSelected: item.condition == 'Replace',
+                        onTap: () => _updateCondition(index, 'Replace'),
                       ),
                     ),
                   ],
@@ -216,7 +302,8 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
                     Container(
                       margin: const EdgeInsets.only(top: 4),
                       decoration: BoxDecoration(
-                        color: context.colors.primaryContainer.withValues(alpha: 0.1),
+                        color: context.colors.primaryContainer
+                            .withValues(alpha: 0.1),
                         borderRadius: AppRadius.brBase,
                       ),
                       child: IconButton(
@@ -239,10 +326,13 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
                       itemBuilder: (context, photoIndex) {
                         return Container(
                           width: 80,
-                          margin: const EdgeInsets.only(right: AppSpacing.stackSm),
+                          margin:
+                              const EdgeInsets.only(right: AppSpacing.stackSm),
                           decoration: BoxDecoration(
                             borderRadius: AppRadius.brBase,
-                            border: Border.all(color: context.colors.outlineVariant),
+                            border: Border.all(
+                              color: context.colors.outlineVariant,
+                            ),
                           ),
                           child: Stack(
                             fit: StackFit.expand,
@@ -264,7 +354,8 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
                                     size: 20,
                                   ),
                                   padding: EdgeInsets.zero,
-                                  onPressed: () => _removeImage(index, photoIndex),
+                                  onPressed: () =>
+                                      _removeImage(index, photoIndex),
                                 ),
                               ),
                             ],
@@ -295,8 +386,10 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
           width: double.infinity,
           height: 56,
           child: FilledButton(
-            onPressed: _isSubmitting ? null : _submitReport,
-            child: _isSubmitting
+            onPressed: (_isCompleting || !_allItemsChecked)
+                ? null
+                : _completeInspection,
+            child: _isCompleting
                 ? SizedBox(
                     width: 24,
                     height: 24,
@@ -305,15 +398,27 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
                       color: context.colors.onPrimary,
                     ),
                   )
-                : const Text(
-                    'Submit Report',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                : Text(
+                    _allItemsChecked
+                        ? 'Complete Inspection'
+                        : 'Complete Inspection (${_items.where((i) => i.isChecked).length}/${_items.length})',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
           ),
         ),
       ),
     );
   }
+
+  Color _conditionColor(String condition) => switch (condition) {
+        'Good' => AppStatusColors.running,
+        'Monitor' => AppStatusColors.pending,
+        'Replace' => AppStatusColors.delayed,
+        _ => context.colors.onSurfaceVariant,
+      };
 }
 
 class _ConditionButton extends StatelessWidget {

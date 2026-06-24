@@ -116,7 +116,7 @@ class JobStatusController extends ChangeNotifier {
     try {
       await _repository.updateJobStatus(
         _job.id,
-        JobStatus.inProgress.apiName,
+        JobStatus.inProgress,
         historyEntry: historyEntry,
       );
     } catch (e) {
