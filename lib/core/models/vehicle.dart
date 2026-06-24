@@ -17,13 +17,19 @@ class Vehicle {
   final String lastJobDate;
   final String lastJobId;
 
-  factory Vehicle.fromJson(Map<String, dynamic> json) => Vehicle(
-        vehicleNumber: json['vehicleNumber'] as String? ?? '',
-        vehicleModel: json['vehicleModel'] as String? ?? '',
-        vehicleType: json['vehicleType'] as String? ?? 'Car',
-        customerName: json['customerName'] as String? ?? '',
-        mobile: json['mobile'] as String? ?? '',
-        lastJobDate: json['lastJobDate'] as String? ?? '',
-        lastJobId: json['lastJobId'] as String? ?? '',
-      );
+  factory Vehicle.fromJson(Map<String, dynamic> json) {
+    final manufacturer = json['manufacturer'] as String?;
+    final model = json['model'] as String?;
+    final computedModel = [manufacturer, model].where((e) => e != null && e.trim().isNotEmpty).join(' ');
+
+    return Vehicle(
+      vehicleNumber: json['registration_number'] as String? ?? json['vehicleNumber'] as String? ?? 'N/A',
+      vehicleModel: computedModel.isNotEmpty ? computedModel : (json['vehicleModel'] as String? ?? 'Unknown Vehicle'),
+      vehicleType: json['type'] as String? ?? json['vehicleType'] as String? ?? 'Car',
+      customerName: json['customerName'] as String? ?? '',
+      mobile: json['mobile'] as String? ?? '',
+      lastJobDate: json['lastJobDate'] as String? ?? '',
+      lastJobId: json['lastJobId'] as String? ?? '',
+    );
+  }
 }

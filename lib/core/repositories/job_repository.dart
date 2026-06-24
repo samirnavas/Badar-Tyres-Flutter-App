@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../auth/session_store.dart';
 import '../models/job.dart';
 import '../models/job_metrics.dart';
 import '../models/job_status.dart';
@@ -17,7 +19,7 @@ class JobRepository {
   final _supabase = Supabase.instance.client;
 
   String get _userId {
-    final id = _supabase.auth.currentUser?.id;
+    final id = SessionStore.currentUser?.id;
     if (id == null) throw Exception('User not logged in');
     return id;
   }
@@ -56,7 +58,7 @@ class JobRepository {
 
   Future<List<Job>> fetchJobs({String status = 'all', String search = ''}) async {
     try {
-      var query = _supabase.from('jobs').select().eq('technician_id', _userId);
+      var query = _supabase.from('jobs').select('*, vehicles(*)').eq('technician_id', _userId);
       
       if (status != 'all') {
         query = query.eq('status', status);
@@ -67,9 +69,16 @@ class JobRepository {
       }
 
       final data = await query;
+      debugPrint('--- RAW SUPABASE JOBS ---');
+      debugPrint(data.toString());
+      debugPrint('-------------------------');
+      
       return data.map((e) => Job.fromJson(e)).toList();
-    } catch (e) {
-      throw Exception('Failed to fetch active jobs. Please check your connection.');
+    } catch (e, stacktrace) {
+      debugPrint('!!! REPOSITORY ERROR !!!');
+      debugPrint(e.toString());
+      debugPrint(stacktrace.toString());
+      throw Exception('Failed to fetch active jobs: $e');
     }
   }
 
@@ -81,7 +90,7 @@ class JobRepository {
   Future<Job> fetchJob(String id) async {
     final data = await _supabase
         .from('jobs')
-        .select()
+        .select('*, vehicles(*)')
         .eq('id', id)
         .eq('technician_id', _userId) // Security check
         .single();

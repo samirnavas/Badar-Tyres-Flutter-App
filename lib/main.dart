@@ -10,14 +10,17 @@ import 'features/home/presentation/home_shell.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   await dotenv.load(fileName: ".env");
 
   await Supabase.initialize(
     url: dotenv.env['SUPABASE_URL'] ?? '',
-    publishableKey: dotenv.env['SUPABASE_PUBLISHABLE_KEY'] ?? dotenv.env['SUPABASE_ANON_KEY'] ?? '',
+    publishableKey:
+        dotenv.env['SUPABASE_ANON_KEY'] ??
+        dotenv.env['SUPABASE_ANON_KEY'] ??
+        '',
   );
-  
+
   await ThemeStore.instance.init();
   final rememberedUser = await SessionStore.instance.loadCurrentUser();
   runApp(MyApp(startLoggedIn: rememberedUser != null));
