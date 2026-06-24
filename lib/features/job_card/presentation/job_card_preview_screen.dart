@@ -5,6 +5,7 @@ import '../../../core/repositories/job_repository.dart';
 import '../../../core/theme/theme.dart';
 import '../../../core/widgets/job_list_tile.dart';
 import '../../inspections/presentation/dvi_checklist_screen.dart';
+import 'job_status_controller.dart';
 
 class JobExecutionScreen extends StatefulWidget {
   const JobExecutionScreen({super.key, required this.job});
@@ -17,149 +18,127 @@ class JobExecutionScreen extends StatefulWidget {
 
 class _JobExecutionScreenState extends State<JobExecutionScreen> {
   final JobRepository _repository = JobRepository();
-  late Job _job;
-  bool _isLoading = false;
+  late final JobStatusController _controller;
 
   @override
   void initState() {
     super.initState();
-    _job = widget.job;
+    _controller = JobStatusController(
+      initialJob: widget.job,
+      repository: _repository,
+    );
+    _controller.addListener(_onControllerChanged);
+  }
+
+  void _onControllerChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    _controller.removeListener(_onControllerChanged);
+    _controller.dispose();
     _repository.dispose();
     super.dispose();
   }
 
-  Future<void> _updateStatus(JobStatus newStatus) async {
-    if (_job.status == newStatus) return;
-
-    setState(() => _isLoading = true);
+  Future<void> _handleStart() async {
     try {
-      final statusString = newStatus.name; // Uses enum name e.g. "awaiting_parts"
-      await _repository.updateJobStatus(_job.id, statusString);
-      setState(() {
-        _job = Job(
-          id: _job.id,
-          jobNumber: _job.jobNumber,
-          customerName: _job.customerName,
-          mobile: _job.mobile,
-          vehicleModel: _job.vehicleModel,
-          vehicleNumber: _job.vehicleNumber,
-          status: newStatus,
-          time: _job.time,
-          date: _job.date,
-          technician: _job.technician,
-          startTime: _job.startTime,
-          expectedEnd: _job.expectedEnd,
-          actualEnd: _job.actualEnd,
-          delay: _job.delay,
-          remarks: _job.remarks,
-          services: _job.services,
-          subTotal: _job.subTotal,
-          gst: _job.gst,
-          grandTotal: _job.grandTotal,
-        );
-      });
+      if (_controller.job.status == JobStatus.onHold) {
+        await _controller.resumeJob();
+      } else {
+        await _controller.startJob();
+      }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update status: $e')));
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+      _showError('Failed to start job: $e');
     }
   }
 
-  Future<void> _toggleService(JobService service, bool? isCompleted) async {
-    if (isCompleted == null || isCompleted == service.isCompleted) return;
-
-    setState(() => _isLoading = true);
-    try {
-      await _repository.updateServiceStatus(service.id, isCompleted);
-      
-      final updatedServices = _job.services.map((s) {
-        if (s.id == service.id) {
-          return JobService(
-            id: s.id,
-            name: s.name,
-            description: s.description,
-            amount: s.amount,
-            isCompleted: isCompleted,
-          );
-        }
-        return s;
-      }).toList();
-
-      setState(() {
-        _job = Job(
-          id: _job.id,
-          jobNumber: _job.jobNumber,
-          customerName: _job.customerName,
-          mobile: _job.mobile,
-          vehicleModel: _job.vehicleModel,
-          vehicleNumber: _job.vehicleNumber,
-          status: _job.status,
-          time: _job.time,
-          date: _job.date,
-          technician: _job.technician,
-          startTime: _job.startTime,
-          expectedEnd: _job.expectedEnd,
-          actualEnd: _job.actualEnd,
-          delay: _job.delay,
-          remarks: _job.remarks,
-          services: updatedServices,
-          subTotal: _job.subTotal,
-          gst: _job.gst,
-          grandTotal: _job.grandTotal,
-        );
-      });
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update service: $e')));
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _flagIssue() async {
-    final confirm = await showDialog<bool>(
+  Future<void> _handlePause() async {
+    final reason = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Flag Issue'),
-        content: const Text('Are you sure you want to block this job? This will notify the admin.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+      builder: (context) => SimpleDialog(
+        backgroundColor: context.colors.surface,
+        title: Text(
+          'Pause job',
+          style: context.typography.titleSm.copyWith(
+            color: context.colors.onSurface,
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: context.colors.errorContainer,
-              foregroundColor: context.colors.onErrorContainer,
+        ),
+        children: [
+          for (final reason in JobStatusController.pauseReasons)
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(context).pop(reason),
+              child: Text(
+                reason,
+                style: context.typography.bodyMd.copyWith(
+                  color: context.colors.onSurface,
+                ),
+              ),
             ),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Block Job'),
-          ),
         ],
       ),
     );
 
-    if (confirm == true) {
-      await _updateStatus(JobStatus.blocked);
+    if (reason == null) return;
+
+    try {
+      await _controller.pauseJob(reason);
+    } catch (e) {
+      if (!mounted) return;
+      _showError('Failed to pause job: $e');
     }
+  }
+
+  Future<void> _handleComplete() async {
+    try {
+      await _controller.completeJob();
+    } catch (e) {
+      if (!mounted) return;
+      _showError('Failed to complete job: $e');
+    }
+  }
+
+  Future<void> _handleStepToggle(JobStep step, bool? isCompleted) async {
+    if (isCompleted == null || isCompleted == step.isCompleted) return;
+
+    try {
+      await _controller.toggleStep(step, isCompleted);
+    } catch (e) {
+      if (!mounted) return;
+      _showError('Failed to update step: $e');
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final job = _controller.job;
+
     return Scaffold(
       backgroundColor: context.colors.surface,
       appBar: AppBar(
+        backgroundColor: context.colors.surface,
+        foregroundColor: context.colors.onSurface,
+        elevation: 0,
+        scrolledUnderElevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text('Job ${_job.jobNumber}'),
-        bottom: _isLoading
+        title: Text(
+          'Job ${job.jobNumber}',
+          style: context.typography.titleSm.copyWith(
+            color: context.colors.onSurface,
+          ),
+        ),
+        bottom: _controller.isLoading
             ? PreferredSize(
                 preferredSize: const Size.fromHeight(2),
                 child: LinearProgressIndicator(
@@ -170,99 +149,95 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
               )
             : null,
       ),
-      body: Stack(
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.containerPadding,
+          AppSpacing.stackMd,
+          AppSpacing.containerPadding,
+          AppSpacing.stackLg,
+        ),
         children: [
-          ListView(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.containerPadding,
-              AppSpacing.stackLg,
-              AppSpacing.containerPadding,
-              180.0, // Space for the bottom block buttons
-            ),
-            children: [
-              _buildVehicleHeader(context),
-              const SizedBox(height: AppSpacing.stackLg),
-              _buildStatusToggles(context),
-              const SizedBox(height: AppSpacing.stackLg),
-              Text('Checklist', style: context.typography.titleSm.copyWith(fontSize: 18)),
-              const SizedBox(height: AppSpacing.gutter),
-              _buildChecklist(context),
-            ],
+          _VehicleHeader(job: job),
+          const SizedBox(height: AppSpacing.stackMd),
+          _ActionSection(
+            job: job,
+            formattedElapsed: _controller.formattedElapsed,
+            onStart: _handleStart,
+            onPause: _handlePause,
+            onComplete: _handleComplete,
           ),
-          Positioned(
-            left: AppSpacing.containerPadding,
-            right: AppSpacing.containerPadding,
-            bottom: 32,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (_job.status == JobStatus.running) ...[
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.checklist),
-                    label: const Text('PERFORM DIGITAL INSPECTION'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.indigo,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => DviChecklistScreen(job: _job),
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: AppSpacing.stackMd),
-                ],
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.warning_amber_rounded),
-                  label: const Text('FLAG ISSUE / BLOCKED'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: context.colors.errorContainer,
-                    foregroundColor: context.colors.onErrorContainer,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  onPressed: _job.status != JobStatus.blocked ? _flagIssue : null,
-                ),
-              ],
+          if (job.status == JobStatus.inProgress) ...[
+            const SizedBox(height: AppSpacing.stackMd),
+            _InspectionButton(job: job),
+          ],
+          const SizedBox(height: AppSpacing.stackMd),
+          Text(
+            'Checklist',
+            style: context.typography.titleSm.copyWith(
+              fontSize: 18,
+              color: context.colors.onSurface,
             ),
           ),
+          const SizedBox(height: AppSpacing.gutter),
+          _StepsChecklist(
+            steps: job.steps,
+            onStepToggle: _handleStepToggle,
+          ),
+          if (job.history.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.stackMd),
+            _HistorySection(history: job.history),
+          ],
         ],
       ),
     );
   }
+}
 
-  Widget _buildVehicleHeader(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.stackMd),
-      decoration: BoxDecoration(
-        color: context.colors.surfaceContainerLow,
+class _VehicleHeader extends StatelessWidget {
+  const _VehicleHeader({required this.job});
+
+  final Job job;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
         borderRadius: AppRadius.brLg,
-        border: Border.all(color: context.colors.outlineVariant),
+        side: BorderSide(color: context.colors.outlineVariant),
       ),
-      child: Column(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.stackMd),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                _job.vehicleModel.isNotEmpty ? _job.vehicleModel : 'Unknown Vehicle',
-                style: context.typography.headlineMd,
+              Expanded(
+                child: Text(
+                  job.vehicleModel.isNotEmpty
+                      ? job.vehicleModel
+                      : 'Unknown Vehicle',
+                  style: context.typography.titleSm.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: context.colors.onSurface,
+                  ),
+                ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: AppStatusColors.tint(_job.status.color),
+                  color: AppStatusColors.tint(job.status.color),
                   borderRadius: AppRadius.brFull,
                 ),
                 child: Text(
-                  _job.status.label,
+                  job.status.label,
                   style: context.typography.labelSm.copyWith(
-                    color: _job.status.color,
+                    color: job.status.color,
                     fontWeight: FontWeight.w600,
+                    letterSpacing: 0,
                   ),
                 ),
               ),
@@ -271,140 +246,347 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
           const SizedBox(height: AppSpacing.stackSm),
           Row(
             children: [
-              Icon(Icons.directions_car_outlined, size: 16, color: context.colors.secondary),
-              const SizedBox(width: 6),
+              Icon(
+                Icons.directions_car_rounded,
+                size: 22,
+                color: context.colors.onSurfaceVariant,
+              ),
+              const SizedBox(width: 8),
               Text(
-                _job.vehicleNumber,
-                style: context.typography.bodyMd.copyWith(color: context.colors.secondary),
+                job.vehicleNumber,
+                style: context.typography.titleSm.copyWith(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: context.colors.onSurface,
+                ),
               ),
             ],
+          ),
+          if (job.customerName.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.gutter),
+            Row(
+              children: [
+                Icon(
+                  Icons.person_outline,
+                  size: 16,
+                  color: context.colors.onSurfaceVariant,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  job.customerName,
+                  style: context.typography.bodyMd.copyWith(
+                    color: context.colors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionSection extends StatelessWidget {
+  const _ActionSection({
+    required this.job,
+    required this.formattedElapsed,
+    required this.onStart,
+    required this.onPause,
+    required this.onComplete,
+  });
+
+  final Job job;
+  final String formattedElapsed;
+  final VoidCallback onStart;
+  final VoidCallback onPause;
+  final VoidCallback onComplete;
+
+  @override
+  Widget build(BuildContext context) {
+    if (job.status == JobStatus.pending || job.status == JobStatus.onHold) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: 52,
+            child: FilledButton.icon(
+              icon: const Icon(Icons.play_arrow_rounded, size: 24),
+              label: Text(
+                job.status == JobStatus.pending ? 'START JOB' : 'RESUME JOB',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                ),
+              ),
+              onPressed: onStart,
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (job.status == JobStatus.inProgress) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: AppRadius.brLg,
+              side: BorderSide(color: context.colors.outlineVariant),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.stackMd,
+                vertical: AppSpacing.gutter,
+              ),
+              child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.timer_outlined,
+                  size: 20,
+                  color: context.colors.onSurfaceVariant,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  formattedElapsed,
+                  style: context.typography.titleSm.copyWith(
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                    color: context.colors.onSurface,
+                  ),
+                ),
+              ],
+              ),
+            ),
           ),
           const SizedBox(height: AppSpacing.gutter),
           Row(
             children: [
-              Icon(Icons.person_outline, size: 16, color: context.colors.secondary),
-              const SizedBox(width: 6),
-              Text(
-                _job.customerName,
-                style: context.typography.bodyMd.copyWith(color: context.colors.secondary),
+              Expanded(
+                child: SizedBox(
+                  height: 52,
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.pause_rounded, size: 22),
+                    label: const Text(
+                      'PAUSE',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: context.colors.onSurface,
+                      side: BorderSide(color: context.colors.outline),
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: AppRadius.brLg,
+                      ),
+                    ),
+                    onPressed: onPause,
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.gutter),
+              Expanded(
+                flex: 2,
+                child: SizedBox(
+                  height: 52,
+                  child: FilledButton.icon(
+                    icon: const Icon(Icons.check_rounded, size: 22),
+                    label: const Text(
+                      'COMPLETE',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppStatusColors.running,
+                      foregroundColor: context.colors.onPrimary,
+                      elevation: 0,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: AppRadius.brLg,
+                      ),
+                    ),
+                    onPressed: onComplete,
+                  ),
+                ),
               ),
             ],
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildStatusToggles(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Status', style: context.typography.titleSm.copyWith(fontSize: 18)),
-        const SizedBox(height: AppSpacing.gutter),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: SegmentedButton<JobStatus>(
-            emptySelectionAllowed: false,
-            multiSelectionEnabled: false,
-            selected: {_job.status == JobStatus.blocked ? JobStatus.pending : _job.status},
-            onSelectionChanged: (Set<JobStatus> newSelection) {
-              _updateStatus(newSelection.first);
-            },
-            segments: const [
-              ButtonSegment<JobStatus>(
-                value: JobStatus.pending,
-                label: Text('Pending'),
-              ),
-              ButtonSegment<JobStatus>(
-                value: JobStatus.running,
-                label: Text('In Progress'),
-              ),
-              ButtonSegment<JobStatus>(
-                value: JobStatus.awaitingParts,
-                label: Text('Awaiting Parts'),
-              ),
-              ButtonSegment<JobStatus>(
-                value: JobStatus.completed,
-                label: Text('Completed'),
-              ),
-            ],
-            style: ButtonStyle(
-              backgroundColor: WidgetStateProperty.resolveWith((states) {
-                if (states.contains(WidgetState.selected)) {
-                  return context.colors.primaryContainer;
-                }
-                return context.colors.surfaceContainerHigh;
-              }),
-              foregroundColor: WidgetStateProperty.resolveWith((states) {
-                if (states.contains(WidgetState.selected)) {
-                  return context.colors.onPrimaryContainer;
-                }
-                return context.colors.onSurfaceVariant;
-              }),
-              side: WidgetStatePropertyAll(
-                BorderSide(color: context.colors.outlineVariant),
-              ),
-              shape: const WidgetStatePropertyAll(
-                RoundedRectangleBorder(borderRadius: AppRadius.brBase),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildChecklist(BuildContext context) {
-    if (_job.services.isEmpty) {
-      return Text(
-        'No services assigned to this job.',
-        style: context.typography.bodyMd.copyWith(color: context.colors.secondary),
       );
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: context.colors.surfaceContainerLow,
+    return const SizedBox.shrink();
+  }
+}
+
+class _InspectionButton extends StatelessWidget {
+  const _InspectionButton({required this.job});
+
+  final Job job;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 52,
+      child: OutlinedButton.icon(
+        icon: const Icon(Icons.checklist, size: 22),
+        label: const Text(
+          'PERFORM DIGITAL INSPECTION',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: context.colors.onSurface,
+          side: BorderSide(color: context.colors.outline),
+          shape: const RoundedRectangleBorder(borderRadius: AppRadius.brLg),
+        ),
+        onPressed: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => DviChecklistScreen(job: job),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _StepsChecklist extends StatelessWidget {
+  const _StepsChecklist({
+    required this.steps,
+    required this.onStepToggle,
+  });
+
+  final List<JobStep> steps;
+  final void Function(JobStep step, bool? isCompleted) onStepToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    if (steps.isEmpty) {
+      return Text(
+        'No steps assigned to this job.',
+        style: context.typography.bodyMd.copyWith(
+                    color: context.colors.onSurfaceVariant,
+        ),
+      );
+    }
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
         borderRadius: AppRadius.brLg,
-        border: Border.all(color: context.colors.outlineVariant),
+        side: BorderSide(color: context.colors.outlineVariant),
       ),
       child: ListView.separated(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        itemCount: _job.services.length,
+        itemCount: steps.length,
         separatorBuilder: (context, index) => Divider(
           height: 1,
           thickness: 1,
-          color: context.colors.outlineVariant.withValues(alpha: 0.5),
+          color: context.colors.outlineVariant.withValues(alpha: 0.8),
         ),
         itemBuilder: (context, index) {
-          final service = _job.services[index];
-          return CheckboxListTile(
-            value: service.isCompleted,
-            onChanged: (val) => _toggleService(service, val),
-            title: Text(
-              service.name,
-              style: context.typography.bodyMd.copyWith(
-                decoration: service.isCompleted ? TextDecoration.lineThrough : null,
-                color: service.isCompleted ? context.colors.secondary : context.colors.onSurface,
+          final step = steps[index];
+          return SizedBox(
+            height: 56,
+            child: CheckboxListTile(
+              value: step.isCompleted,
+              onChanged: (value) => onStepToggle(step, value),
+              title: Text(
+                step.title,
+                style: context.typography.bodyMd.copyWith(
+                  decoration:
+                      step.isCompleted ? TextDecoration.lineThrough : null,
+                  color: step.isCompleted
+                      ? context.colors.onSurfaceVariant
+                      : context.colors.onSurface,
+                ),
               ),
+              activeColor: context.colors.primary,
+              checkColor: context.colors.onPrimary,
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+              visualDensity: VisualDensity.standard,
             ),
-            subtitle: service.description.isNotEmpty
-                ? Text(
-                    service.description,
-                    style: context.typography.bodyMd.copyWith(
-                      fontSize: 13,
-                      color: context.colors.secondary,
-                    ),
-                  )
-                : null,
-            activeColor: context.colors.primaryContainer,
-            checkColor: context.colors.onPrimaryContainer,
-            controlAffinity: ListTileControlAffinity.leading,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           );
         },
       ),
+    );
+  }
+}
+
+class _HistorySection extends StatelessWidget {
+  const _HistorySection({required this.history});
+
+  final List<JobHistoryEntry> history;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'History',
+          style: context.typography.titleSm.copyWith(
+            fontSize: 18,
+            color: context.colors.onSurface,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.gutter),
+        Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: AppRadius.brLg,
+            side: BorderSide(color: context.colors.outlineVariant),
+          ),
+          child: ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: history.length,
+            separatorBuilder: (context, index) => Divider(
+              height: 1,
+              color: context.colors.outlineVariant.withValues(alpha: 0.8),
+            ),
+            itemBuilder: (context, index) {
+              final entry = history[index];
+              final time =
+                  '${entry.timestamp.hour.toString().padLeft(2, '0')}:'
+                  '${entry.timestamp.minute.toString().padLeft(2, '0')}';
+              return ListTile(
+                minVerticalPadding: 12,
+                leading: Icon(
+                  Icons.history,
+                  color: context.colors.onSurfaceVariant,
+                  size: 20,
+                ),
+                title: Text(
+                  entry.action,
+                  style: context.typography.bodyMd.copyWith(
+                    color: context.colors.onSurface,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                subtitle: entry.note == null
+                    ? null
+                    : Text(
+                        entry.note!,
+                        style: context.typography.bodyMd.copyWith(
+                          fontSize: 13,
+                          color: context.colors.onSurfaceVariant,
+                        ),
+                      ),
+                trailing: Text(
+                  time,
+                  style: context.typography.labelSm.copyWith(
+                    letterSpacing: 0,
+                    color: context.colors.onSurfaceVariant,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }

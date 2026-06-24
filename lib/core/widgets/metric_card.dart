@@ -2,26 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/theme.dart';
 
-/// A compact dashboard summary card showing a single metric: an accent icon,
-/// a muted label, and a large colored value (e.g. "Total Jobs — 45").
-///
-/// Designed to tile in a 2-column grid. Use the general constructor for custom
-/// metrics, or the named constructors for the standard Badar Tyres metrics.
-///
-/// ```dart
-/// GridView.count(
-///   crossAxisCount: 2,
-///   childAspectRatio: 2.4,
-///   crossAxisSpacing: AppSpacing.gutter,
-///   mainAxisSpacing: AppSpacing.gutter,
-///   children: const [
-///     MetricCard.totalJobs(value: '45'),
-///     MetricCard.running(value: '18'),
-///     MetricCard.completed(value: '20'),
-///     MetricCard.delayed(value: '7'),
-///   ],
-/// );
-/// ```
+/// Dashboard metric summary using Material 3 [Card].
 class MetricCard extends StatelessWidget {
   const MetricCard({
     super.key,
@@ -32,7 +13,6 @@ class MetricCard extends StatelessWidget {
     this.onTap,
   });
 
-  /// Total jobs — violet accent, clipboard icon.
   const MetricCard.totalJobs({
     super.key,
     required this.value,
@@ -41,7 +21,6 @@ class MetricCard extends StatelessWidget {
   })  : icon = Icons.assignment_outlined,
         accentColor = AppStatusColors.total;
 
-  /// Running jobs — green accent, play icon.
   const MetricCard.running({
     super.key,
     required this.value,
@@ -50,7 +29,6 @@ class MetricCard extends StatelessWidget {
   })  : icon = Icons.play_circle_outline,
         accentColor = AppStatusColors.running;
 
-  /// Completed jobs — blue accent, check icon.
   const MetricCard.completed({
     super.key,
     required this.value,
@@ -59,7 +37,6 @@ class MetricCard extends StatelessWidget {
   })  : icon = Icons.check_circle_outline,
         accentColor = AppStatusColors.completed;
 
-  /// Delayed jobs — red accent, clock icon.
   const MetricCard.delayed({
     super.key,
     required this.value,
@@ -76,12 +53,17 @@ class MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: context.colors.surfaceContainerHigh,
-      borderRadius: AppRadius.brLg,
-      clipBehavior: Clip.antiAlias,
+    final colors = context.colors;
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: AppRadius.brLg,
+        side: BorderSide(color: colors.outlineVariant),
+      ),
       child: InkWell(
         onTap: onTap,
+        borderRadius: AppRadius.brLg,
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.stackMd),
           child: Row(
@@ -106,22 +88,22 @@ class MetricCard extends StatelessWidget {
                       label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: context.typography.bodyMd.copyWith(
-                        fontSize: 13,
-                        height: 1.1,
-                        color: context.colors.secondary,
-                      ),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontSize: 13,
+                            height: 1.1,
+                            color: colors.onSurfaceVariant,
+                          ),
                     ),
                     const SizedBox(height: AppSpacing.stackSm),
                     Text(
                       value,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: context.typography.headlineMd.copyWith(
-                        color: accentColor,
-                        fontWeight: FontWeight.w700,
-                        height: 1.0,
-                      ),
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            color: accentColor,
+                            fontWeight: FontWeight.w700,
+                            height: 1.0,
+                          ),
                     ),
                   ],
                 ),

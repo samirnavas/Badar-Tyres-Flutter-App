@@ -684,11 +684,14 @@ class _ServiceTable extends StatelessWidget {
                 direction: DismissDirection.endToStart,
                 onDismissed: (_) => onRemove(i),
                 background: Container(
-                  color: AppStatusColors.delayed.withValues(alpha: 0.85),
+                  color: context.colors.error,
                   alignment: Alignment.centerRight,
                   padding: const EdgeInsets.only(right: 16),
-                  child: const Icon(Icons.delete_outline,
-                      color: Colors.white, size: 20),
+                  child: Icon(
+                    Icons.delete_outline,
+                    color: context.colors.onError,
+                    size: 20,
+                  ),
                 ),
                 child: _ServiceDataRow(index: i + 1, item: services[i]),
               ),

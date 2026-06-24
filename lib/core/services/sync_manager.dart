@@ -47,12 +47,42 @@ class SyncManager {
     return _jobCache.values.map((v) => Job.fromJson(jsonDecode(v))).toList();
   }
 
+  Future<void> updateJobInCache(
+    String jobId,
+    Job Function(Job current) transform,
+  ) async {
+    final jobs = getCachedJobs();
+    final index = jobs.indexWhere((job) => job.id == jobId);
+    if (index == -1) return;
+
+    jobs[index] = transform(jobs[index]);
+    await cacheJobs(jobs);
+  }
+
   // --- OFFLINE MUTATIONS ---
-  Future<void> enqueueJobStatus(String jobId, String status) async {
+  Future<void> enqueueJobStatus(
+    String jobId,
+    String status, {
+    String? pauseReason,
+  }) async {
     await _enqueue({
       'type': 'job_status',
       'id': jobId,
       'value': status,
+      'pause_reason': ?pauseReason,
+    });
+  }
+
+  Future<void> enqueueJobStep(
+    String jobId,
+    String stepId,
+    bool isCompleted,
+  ) async {
+    await _enqueue({
+      'type': 'job_step',
+      'id': jobId,
+      'step_id': stepId,
+      'value': isCompleted,
     });
   }
 
@@ -96,10 +126,22 @@ class SyncManager {
         final value = payload['value'];
 
         if (type == 'job_status') {
-          await _apiClient.postJson('sync/job_status', {
-             'id': id,
-             'technician_id': _userId,
-             'status': value,
+          final pauseReason = payload['pause_reason'];
+          final body = {
+            'id': id,
+            'technician_id': _userId,
+            'status': value,
+            'pause_reason': ?pauseReason,
+          };
+          await _apiClient.postJson('sync/job_status', body);
+          await _apiClient.patchJson('jobs/$id', {
+            'status': value,
+            'pause_reason': ?pauseReason,
+          });
+        } else if (type == 'job_step') {
+          final stepId = payload['step_id'];
+          await _apiClient.patchJson('jobs/$id/steps/$stepId', {
+            'is_completed': value,
           });
         } else if (type == 'service_status') {
           await _apiClient.postJson('sync/service_status', {

@@ -4,7 +4,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../auth/session_store.dart';
 import '../models/job.dart';
 import '../models/job_metrics.dart';
-import '../models/job_status.dart';
 import '../models/vehicle.dart';
 import '../services/sync_manager.dart';
 
@@ -29,11 +28,13 @@ class JobRepository {
         .from('jobs')
         .select('status')
         .eq('technician_id', _userId);
-        
+
     int total = response.length;
-    int completed = response.where((j) => j['status'] == 'completed').length;
+    int completed =
+        response.where((j) => j['status'] == 'completed').length;
     int pending = response.where((j) => j['status'] == 'pending').length;
-    int inProgress = response.where((j) => j['status'] == 'in_progress').length;
+    int inProgress =
+        response.where((j) => j['status'] == 'in_progress').length;
 
     return JobMetrics(
       totalJobs: total,
@@ -45,7 +46,10 @@ class JobRepository {
   }
 
   Stream<List<Job>> streamJobs({String status = 'all'}) {
-    final stream = _supabase.from('jobs').stream(primaryKey: ['id']).eq('technician_id', _userId);
+    final stream = _supabase
+        .from('jobs')
+        .stream(primaryKey: ['id'])
+        .eq('technician_id', _userId);
     return stream.map((data) {
       final jobs = data.map((e) => Job.fromJson(e)).toList();
       if (status != 'all') {
@@ -58,12 +62,15 @@ class JobRepository {
 
   Future<List<Job>> fetchJobs({String status = 'all', String search = ''}) async {
     try {
-      var query = _supabase.from('jobs').select('*, vehicles(*)').eq('technician_id', _userId);
-      
+      var query = _supabase
+          .from('jobs')
+          .select('*, vehicles(*)')
+          .eq('technician_id', _userId);
+
       if (status != 'all') {
         query = query.eq('status', status);
       }
-      
+
       if (search.isNotEmpty) {
         query = query.ilike('job_number', '%$search%');
       }
@@ -78,10 +85,15 @@ class JobRepository {
       if (cached.isNotEmpty) {
         var filtered = cached;
         if (status != 'all') {
-          filtered = filtered.where((j) => j.status.name == status).toList();
+          filtered =
+              filtered.where((j) => j.status.apiName == status).toList();
         }
         if (search.isNotEmpty) {
-           filtered = filtered.where((j) => j.jobNumber.toLowerCase().contains(search.toLowerCase())).toList();
+          filtered = filtered
+              .where(
+                (j) => j.jobNumber.toLowerCase().contains(search.toLowerCase()),
+              )
+              .toList();
         }
         return filtered;
       }
@@ -99,41 +111,91 @@ class JobRepository {
         .from('jobs')
         .select('*, vehicles(*)')
         .eq('id', id)
-        .eq('technician_id', _userId) // Security check
+        .eq('technician_id', _userId)
         .single();
     return Job.fromJson(data);
   }
 
-  Future<void> updateJobStatus(String jobId, String status) async {
+  Future<void> updateJobStatus(
+    String jobId,
+    String status, {
+    String? pauseReason,
+    JobHistoryEntry? historyEntry,
+  }) async {
+    final parsedStatus = jobStatusFromName(status);
+
+    await _syncManager.updateJobInCache(jobId, (job) {
+      final updatedHistory = historyEntry == null
+          ? job.history
+          : [...job.history, historyEntry];
+      return job.copyWith(status: parsedStatus, history: updatedHistory);
+    });
+
     try {
-      await _syncManager.enqueueJobStatus(jobId, status);
+      await _syncManager.enqueueJobStatus(
+        jobId,
+        status,
+        pauseReason: pauseReason,
+      );
     } catch (e) {
-      throw Exception('Failed to enqueue job status: $e');
+      throw Exception('Failed to update job status: $e');
+    }
+  }
+
+  Future<void> toggleJobStep(
+    String jobId,
+    String stepId,
+    bool isCompleted,
+  ) async {
+    final completedAt = isCompleted ? DateTime.now() : null;
+
+    await _syncManager.updateJobInCache(jobId, (job) {
+      final updatedSteps = job.steps
+          .map(
+            (step) => step.id == stepId
+                ? step.copyWith(
+                    isCompleted: isCompleted,
+                    completedAt: completedAt,
+                    clearCompletedAt: !isCompleted,
+                  )
+                : step,
+          )
+          .toList();
+      return job.copyWith(steps: updatedSteps);
+    });
+
+    try {
+      await _syncManager.enqueueJobStep(jobId, stepId, isCompleted);
+    } catch (e) {
+      throw Exception('Failed to toggle job step: $e');
     }
   }
 
   Future<void> startJob(String jobId) async {
-    try {
-      await _syncManager.enqueueJobStatus(jobId, JobStatus.running.name);
-    } catch (e) {
-      throw Exception('Failed to start job locally: $e');
-    }
+    await updateJobStatus(jobId, JobStatus.inProgress.apiName);
   }
 
-  Future<void> pauseJob(String jobId, JobStatus reasonStatus) async {
-    try {
-      await _syncManager.enqueueJobStatus(jobId, reasonStatus.name);
-    } catch (e) {
-      throw Exception('Failed to pause job locally: $e');
-    }
+  Future<void> pauseJob(
+    String jobId,
+    JobStatus reasonStatus, {
+    String? pauseReason,
+  }) async {
+    await updateJobStatus(
+      jobId,
+      reasonStatus.apiName,
+      pauseReason: pauseReason,
+      historyEntry: pauseReason == null
+          ? null
+          : JobHistoryEntry(
+              action: 'paused',
+              timestamp: DateTime.now(),
+              note: pauseReason,
+            ),
+    );
   }
 
   Future<void> completeJob(String jobId) async {
-    try {
-      await _syncManager.enqueueJobStatus(jobId, JobStatus.completed.name);
-    } catch (e) {
-      throw Exception('Failed to complete job locally: $e');
-    }
+    await updateJobStatus(jobId, JobStatus.completed.apiName);
   }
 
   Future<void> updateServiceStatus(String serviceId, bool isCompleted) async {
@@ -145,31 +207,30 @@ class JobRepository {
   }
 
   Future<List<Map<String, dynamic>>> fetchTechnicians() async {
-    final data = await _supabase.from('users').select('id, name').eq('role', 'technician');
+    final data =
+        await _supabase.from('users').select('id, name').eq('role', 'technician');
     return data;
   }
 
   Future<Map<String, List<String>>> fetchManufacturers() async {
-    // Simplified fetch for manufacturers/models from Supabase
     final data = await _supabase.from('manufacturers').select();
     final map = <String, List<String>>{};
     for (final row in data) {
       final name = row['name'] as String;
-      final models = (row['models'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [];
+      final models = (row['models'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [];
       map[name] = models;
     }
     return map;
   }
 
   Future<Job> createJob(Map<String, dynamic> payload) async {
-    // Enforce technician_id check on creation if not provided
     payload['technician_id'] ??= _userId;
-    
-    final data = await _supabase
-        .from('jobs')
-        .insert(payload)
-        .select()
-        .single();
+
+    final data =
+        await _supabase.from('jobs').insert(payload).select().single();
     return Job.fromJson(data);
   }
 

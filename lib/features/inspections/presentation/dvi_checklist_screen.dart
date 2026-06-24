@@ -175,7 +175,7 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
                     Expanded(
                       child: _ConditionButton(
                         label: 'Good',
-                        color: Colors.green,
+                        color: AppStatusColors.running,
                         isSelected: item.condition == 'Green',
                         onTap: () => _updateCondition(index, 'Green'),
                       ),
@@ -184,7 +184,7 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
                     Expanded(
                       child: _ConditionButton(
                         label: 'Monitor',
-                        color: Colors.orange,
+                        color: AppStatusColors.pending,
                         isSelected: item.condition == 'Yellow',
                         onTap: () => _updateCondition(index, 'Yellow'),
                       ),
@@ -193,7 +193,7 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
                     Expanded(
                       child: _ConditionButton(
                         label: 'Action',
-                        color: Colors.red,
+                        color: AppStatusColors.delayed,
                         isSelected: item.condition == 'Red',
                         onTap: () => _updateCondition(index, 'Red'),
                       ),
@@ -258,7 +258,11 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
                                 top: -8,
                                 right: -8,
                                 child: IconButton(
-                                  icon: const Icon(Icons.cancel, color: Colors.white, size: 20),
+                                  icon: Icon(
+                                    Icons.cancel,
+                                    color: context.colors.onPrimary,
+                                    size: 20,
+                                  ),
                                   padding: EdgeInsets.zero,
                                   onPressed: () => _removeImage(index, photoIndex),
                                 ),
@@ -281,7 +285,7 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
           color: context.colors.surface,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
+              color: context.colors.scrim.withValues(alpha: 0.08),
               blurRadius: 10,
               offset: const Offset(0, -5),
             ),
@@ -290,20 +294,16 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
         child: SizedBox(
           width: double.infinity,
           height: 56,
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: context.colors.primaryContainer,
-              foregroundColor: context.colors.onPrimaryContainer,
-              shape: RoundedRectangleBorder(
-                borderRadius: AppRadius.brBase,
-              ),
-            ),
+          child: FilledButton(
             onPressed: _isSubmitting ? null : _submitReport,
             child: _isSubmitting
-                ? const SizedBox(
+                ? SizedBox(
                     width: 24,
                     height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: context.colors.onPrimary,
+                    ),
                   )
                 : const Text(
                     'Submit Report',
@@ -336,7 +336,7 @@ class _ConditionButton extends StatelessWidget {
       child: Container(
         height: 56,
         decoration: BoxDecoration(
-          color: isSelected ? color.withValues(alpha: 0.15) : Colors.transparent,
+          color: isSelected ? color.withValues(alpha: 0.15) : context.colors.surface,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isSelected ? color : context.colors.outlineVariant,

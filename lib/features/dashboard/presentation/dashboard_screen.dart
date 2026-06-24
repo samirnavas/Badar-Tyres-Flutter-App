@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../core/api/api_client.dart';
+import '../../../core/auth/session_store.dart';
 import '../../../core/models/job.dart';
 import '../../../core/models/job_metrics.dart';
 import '../../../core/repositories/job_repository.dart';
@@ -30,8 +31,8 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen>
     with SingleTickerProviderStateMixin {
-  static const _tabs = ['All Jobs', 'Running', 'Completed', 'Delayed'];
-  static const _statusParams = ['all', 'running', 'completed', 'delayed'];
+  static const _tabs = ['All Jobs', 'In Progress', 'Completed', 'On Hold'];
+  static const _statusParams = ['all', 'in_progress', 'completed', 'on_hold'];
 
   final JobRepository _repository = JobRepository();
   late final TabController _tabController;
@@ -119,19 +120,26 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isTech = SessionStore.currentUser?.role == 'Technician';
+
     return Scaffold(
       backgroundColor: context.colors.surface,
-      appBar: AppBar(
-        leading: IconButton(icon: const Icon(Icons.menu), onPressed: () {}),
-        title: const Text('Jobs'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_none_rounded),
-            onPressed: () {},
-          ),
-          const SizedBox(width: AppSpacing.base),
-        ],
-      ),
+      appBar: isTech
+          ? null
+          : AppBar(
+              leading: IconButton(
+                icon: const Icon(Icons.menu),
+                onPressed: () {},
+              ),
+              title: const Text('Jobs'),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.notifications_none_rounded),
+                  onPressed: () {},
+                ),
+                const SizedBox(width: AppSpacing.base),
+              ],
+            ),
       body: GestureDetector(
         onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
         behavior: HitTestBehavior.opaque,

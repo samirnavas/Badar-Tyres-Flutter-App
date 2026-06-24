@@ -52,6 +52,16 @@ class ApiClient {
     );
   }
 
+  Future<dynamic> patchJson(String path, Map<String, dynamic> body) async {
+    return _send(
+      () => _client.patch(
+        _uri(path),
+        headers: _headers,
+        body: jsonEncode(body),
+      ),
+    );
+  }
+
   static const Map<String, String> _headers = {
     'Content-Type': 'application/json',
     'Accept': 'application/json',

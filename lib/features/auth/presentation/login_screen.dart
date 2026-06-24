@@ -149,7 +149,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     flex: 5,
                     child: Center(
                       child: SvgPicture.asset(
-                        'assets/images/full_logo.svg',
+                        'assets/images/badar_logo_black.svg',
                         width: size.width * 0.55,
                         semanticsLabel: 'Badar Tyres',
                       ),

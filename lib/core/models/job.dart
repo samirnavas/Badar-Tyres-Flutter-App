@@ -1,7 +1,105 @@
 import 'dart:convert';
+
 import '../auth/session_store.dart';
-import 'job_status.dart';
 import 'vehicle.dart';
+
+/// Lifecycle state of a job card.
+enum JobStatus { pending, inProgress, onHold, completed }
+
+/// Parses an API status string into a [JobStatus].
+JobStatus jobStatusFromName(String? name) => switch (name?.toLowerCase()) {
+      'pending' || 'approved' || 'estimate' => JobStatus.pending,
+      'in_progress' || 'running' => JobStatus.inProgress,
+      'on_hold' ||
+      'delayed' ||
+      'awaiting_parts' ||
+      'blocked' =>
+        JobStatus.onHold,
+      'completed' => JobStatus.completed,
+      _ => JobStatus.pending,
+    };
+
+extension JobStatusApi on JobStatus {
+  String get apiName => switch (this) {
+        JobStatus.pending => 'pending',
+        JobStatus.inProgress => 'in_progress',
+        JobStatus.onHold => 'on_hold',
+        JobStatus.completed => 'completed',
+      };
+}
+
+/// A single checklist step on a job execution card.
+class JobStep {
+  const JobStep({
+    required this.id,
+    required this.title,
+    this.isCompleted = false,
+    this.completedAt,
+  });
+
+  final String id;
+  final String title;
+  final bool isCompleted;
+  final DateTime? completedAt;
+
+  factory JobStep.fromJson(Map<String, dynamic> json) => JobStep(
+        id: json['id']?.toString() ?? json['step_id']?.toString() ?? '',
+        title: json['title'] as String? ?? json['name'] as String? ?? '',
+        isCompleted: json['is_completed'] as bool? ?? false,
+        completedAt: json['completed_at'] != null
+            ? DateTime.tryParse(json['completed_at'].toString())
+            : null,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'is_completed': isCompleted,
+        if (completedAt != null) 'completed_at': completedAt!.toIso8601String(),
+      };
+
+  JobStep copyWith({
+    String? id,
+    String? title,
+    bool? isCompleted,
+    DateTime? completedAt,
+    bool clearCompletedAt = false,
+  }) {
+    return JobStep(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      isCompleted: isCompleted ?? this.isCompleted,
+      completedAt:
+          clearCompletedAt ? null : (completedAt ?? this.completedAt),
+    );
+  }
+}
+
+/// A timestamped event in the job's execution history.
+class JobHistoryEntry {
+  const JobHistoryEntry({
+    required this.action,
+    required this.timestamp,
+    this.note,
+  });
+
+  final String action;
+  final DateTime timestamp;
+  final String? note;
+
+  factory JobHistoryEntry.fromJson(Map<String, dynamic> json) => JobHistoryEntry(
+        action: json['action'] as String? ?? '',
+        timestamp: DateTime.tryParse(json['timestamp']?.toString() ?? '') ??
+            DateTime.now(),
+        note: json['note'] as String?,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'action': action,
+        'timestamp': timestamp.toIso8601String(),
+        if (note != null) 'note': note,
+      };
+}
 
 /// A billable service / part on a job card.
 class JobService {
@@ -59,6 +157,8 @@ class Job {
     this.delay,
     this.remarks = '',
     this.services = const [],
+    this.steps = const [],
+    this.history = const [],
     this.subTotal = 0,
     this.gst = 0,
     this.grandTotal = 0,
@@ -85,6 +185,8 @@ class Job {
   final String? delay;
   final String remarks;
   final List<JobService> services;
+  final List<JobStep> steps;
+  final List<JobHistoryEntry> history;
   final double subTotal;
   final double gst;
   final double grandTotal;
@@ -123,7 +225,10 @@ class Job {
         ? Vehicle.fromJson(Map<String, dynamic>.from(json['vehicles'] as Map))
         : (json['vehicle'] != null ? Vehicle.fromJson(Map<String, dynamic>.from(json['vehicle'] as Map)) : null);
 
-    final statusStr = json['status']?.toString() ?? 'Estimate';
+    final statusStr = json['status']?.toString() ?? 'pending';
+
+    final parsedSteps = _parseSteps(json, parsedServices);
+    final parsedHistory = _parseHistory(json);
     
     String rawJobNumber = json['idx']?.toString() ?? json['job_number']?.toString() ?? json['jobNumber']?.toString() ?? json['id']?.toString() ?? '';
     if (rawJobNumber.length >= 36 && rawJobNumber.contains('-')) {
@@ -159,6 +264,8 @@ class Job {
       services: parsedServices.isNotEmpty ? parsedServices : ((json['services'] as List<dynamic>? ?? [])
           .map((e) => JobService.fromJson(Map<String, dynamic>.from(e as Map)))
           .toList()),
+      steps: parsedSteps,
+      history: parsedHistory,
       subTotal: (meta?['subtotal'] as num?)?.toDouble() ?? (json['sub_total'] as num?)?.toDouble() ?? (json['subTotal'] as num?)?.toDouble() ?? 0,
       gst: (meta?['total_tax'] as num?)?.toDouble() ?? (json['gst'] as num?)?.toDouble() ?? 0,
       grandTotal: (meta?['total_amount'] as num?)?.toDouble() ?? (json['grand_total'] as num?)?.toDouble() ?? (json['grandTotal'] as num?)?.toDouble() ?? 0,
@@ -186,6 +293,8 @@ class Job {
     String? delay,
     String? remarks,
     List<JobService>? services,
+    List<JobStep>? steps,
+    List<JobHistoryEntry>? history,
     double? subTotal,
     double? gst,
     double? grandTotal,
@@ -212,6 +321,8 @@ class Job {
       delay: delay ?? this.delay,
       remarks: remarks ?? this.remarks,
       services: services ?? this.services,
+      steps: steps ?? this.steps,
+      history: history ?? this.history,
       subTotal: subTotal ?? this.subTotal,
       gst: gst ?? this.gst,
       grandTotal: grandTotal ?? this.grandTotal,
@@ -226,7 +337,7 @@ class Job {
         'mobile': mobile,
         'vehicle_model': vehicleModel,
         'vehicle_number': vehicleNumber,
-        'status': status.name,
+        'status': status.apiName,
         'time': time,
         'date': date,
         'technician': technician,
@@ -236,8 +347,52 @@ class Job {
         'delay': delay,
         'remarks': remarks,
         'services': services.map((e) => e.toJson()).toList(),
+        'steps': steps.map((e) => e.toJson()).toList(),
+        'history': history.map((e) => e.toJson()).toList(),
         'sub_total': subTotal,
         'gst': gst,
         'grand_total': grandTotal,
       };
+}
+
+List<JobStep> _parseSteps(
+  Map<String, dynamic> json,
+  List<JobService> services,
+) {
+  final raw = json['steps'];
+  if (raw is List && raw.isNotEmpty) {
+    return raw
+        .map((e) => JobStep.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
+  if (services.isNotEmpty) {
+    return services
+        .map(
+          (service) => JobStep(
+            id: service.id.isNotEmpty ? service.id : service.name,
+            title: service.name.isNotEmpty ? service.name : service.description,
+            isCompleted: service.isCompleted,
+          ),
+        )
+        .toList();
+  }
+
+  return const [
+    JobStep(id: 'inspect', title: 'Vehicle inspection'),
+    JobStep(id: 'service', title: 'Perform service work'),
+    JobStep(id: 'quality', title: 'Quality check'),
+    JobStep(id: 'handover', title: 'Customer handover'),
+  ];
+}
+
+List<JobHistoryEntry> _parseHistory(Map<String, dynamic> json) {
+  final raw = json['history'] ?? json['job_history'];
+  if (raw is! List) return const [];
+
+  return raw
+      .map(
+        (e) => JobHistoryEntry.fromJson(Map<String, dynamic>.from(e as Map)),
+      )
+      .toList();
 }
