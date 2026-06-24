@@ -195,7 +195,7 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color =
-        selected ? context.colors.primaryContainer : context.colors.onSurfaceVariant;
+        selected ? context.colors.primary : context.colors.onSurfaceVariant;
     return Expanded(
       child: InkWell(
         onTap: onTap,
@@ -230,7 +230,7 @@ class _CreateJobButton extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Material(
-          color: context.colors.primaryContainer,
+          color: context.colors.primary,
           shape: const CircleBorder(),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
@@ -239,7 +239,7 @@ class _CreateJobButton extends StatelessWidget {
               width: 52,
               height: 52,
               child: Icon(Icons.add,
-                  color: context.colors.onPrimaryContainer, size: 28),
+                  color: context.colors.onPrimary, size: 28),
             ),
           ),
         ),

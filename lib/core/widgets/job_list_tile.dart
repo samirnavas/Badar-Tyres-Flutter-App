@@ -56,6 +56,7 @@ class JobListTile extends StatelessWidget {
     this.actualEnd,
     this.delay,
     this.onTap,
+    this.onStatusChange,
   });
 
   final String jobNumber;
@@ -81,6 +82,7 @@ class JobListTile extends StatelessWidget {
   final String? delay;
 
   final VoidCallback? onTap;
+  final void Function(JobStatus)? onStatusChange;
 
 
 
@@ -105,6 +107,10 @@ class JobListTile extends StatelessWidget {
               _buildTechnicianRow(context),
               const _TileDivider(),
               _buildTimingRow(context),
+              if (onStatusChange != null && status != JobStatus.completed) ...[
+                const _TileDivider(),
+                _buildActionBar(context),
+              ],
             ],
           ),
         ),
@@ -236,6 +242,85 @@ class JobListTile extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildActionBar(BuildContext context) {
+    if (status == JobStatus.pending || status == JobStatus.delayed || status == JobStatus.awaitingParts || status == JobStatus.blocked) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          ElevatedButton.icon(
+            onPressed: () => onStatusChange?.call(JobStatus.running),
+            icon: const Icon(Icons.play_arrow),
+            label: Text(status == JobStatus.pending ? 'Start Job' : 'Resume Job'),
+            style: ElevatedButton.styleFrom(
+              minimumSize: const Size(0, 44),
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+            ),
+          ),
+        ],
+      );
+    } else if (status == JobStatus.running) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          OutlinedButton.icon(
+            onPressed: () => _showPauseDialog(context),
+            icon: const Icon(Icons.pause),
+            label: const Text('Pause'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(0, 44),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.gutter),
+          ElevatedButton.icon(
+            onPressed: () => onStatusChange?.call(JobStatus.completed),
+            icon: const Icon(Icons.check),
+            label: const Text('Complete'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppStatusColors.running,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(0, 44),
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+            ),
+          ),
+        ],
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
+  void _showPauseDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Pause Job'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: const Text('Waiting on Parts'),
+                leading: const Icon(Icons.inventory_2_outlined),
+                onTap: () {
+                  Navigator.pop(context);
+                  onStatusChange?.call(JobStatus.awaitingParts);
+                },
+              ),
+              ListTile(
+                title: const Text('Blocked / Other Issue'),
+                leading: const Icon(Icons.error_outline),
+                onTap: () {
+                  Navigator.pop(context);
+                  onStatusChange?.call(JobStatus.blocked);
+                },
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

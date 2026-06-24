@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../core/models/inspection.dart';
 import '../../../core/models/job.dart';
@@ -17,6 +20,7 @@ class DviChecklistScreen extends StatefulWidget {
 
 class _DviChecklistScreenState extends State<DviChecklistScreen> {
   final InspectionRepository _repository = InspectionRepository();
+  final ImagePicker _picker = ImagePicker();
   bool _isSubmitting = false;
 
   late List<InspectionItem> _items;
@@ -44,7 +48,7 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
         system: _items[index].system,
         condition: condition,
         notes: _items[index].notes,
-        photoUrl: _items[index].photoUrl,
+        photoUrls: _items[index].photoUrls,
       );
     });
   }
@@ -54,8 +58,46 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
       system: _items[index].system,
       condition: _items[index].condition,
       notes: notes,
-      photoUrl: _items[index].photoUrl,
+      photoUrls: _items[index].photoUrls,
     );
+  }
+
+  Future<void> _captureImage(int index) async {
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 50,
+      );
+      if (image != null) {
+        setState(() {
+          final updatedUrls = List<String>.from(_items[index].photoUrls)..add(image.path);
+          _items[index] = InspectionItem(
+            system: _items[index].system,
+            condition: _items[index].condition,
+            notes: _items[index].notes,
+            photoUrls: updatedUrls,
+          );
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to capture image: $e')),
+        );
+      }
+    }
+  }
+
+  void _removeImage(int itemIndex, int photoIndex) {
+    setState(() {
+      final updatedUrls = List<String>.from(_items[itemIndex].photoUrls)..removeAt(photoIndex);
+      _items[itemIndex] = InspectionItem(
+        system: _items[itemIndex].system,
+        condition: _items[itemIndex].condition,
+        notes: _items[itemIndex].notes,
+        photoUrls: updatedUrls,
+      );
+    });
   }
 
   Future<void> _submitReport() async {
@@ -159,12 +201,75 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
                   ],
                 ),
                 const SizedBox(height: AppSpacing.stackMd),
-                CustomTextField(
-                  hint: 'Add Notes (Optional)',
-                  onChanged: (val) => _updateNotes(index, val),
-                  minLines: 1,
-                  maxLines: 3,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: CustomTextField(
+                        hint: 'Add Notes (Optional)',
+                        onChanged: (val) => _updateNotes(index, val),
+                        minLines: 1,
+                        maxLines: 3,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.stackSm),
+                    Container(
+                      margin: const EdgeInsets.only(top: 4),
+                      decoration: BoxDecoration(
+                        color: context.colors.primaryContainer.withValues(alpha: 0.1),
+                        borderRadius: AppRadius.brBase,
+                      ),
+                      child: IconButton(
+                        onPressed: () => _captureImage(index),
+                        icon: const Icon(Icons.camera_alt),
+                        color: context.colors.primaryContainer,
+                        iconSize: 24,
+                        tooltip: 'Take Photo',
+                      ),
+                    ),
+                  ],
                 ),
+                if (item.photoUrls.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.stackSm),
+                  SizedBox(
+                    height: 80,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: item.photoUrls.length,
+                      itemBuilder: (context, photoIndex) {
+                        return Container(
+                          width: 80,
+                          margin: const EdgeInsets.only(right: AppSpacing.stackSm),
+                          decoration: BoxDecoration(
+                            borderRadius: AppRadius.brBase,
+                            border: Border.all(color: context.colors.outlineVariant),
+                          ),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              ClipRRect(
+                                borderRadius: AppRadius.brBase,
+                                child: Image.file(
+                                  File(item.photoUrls[photoIndex]),
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                              Positioned(
+                                top: -8,
+                                right: -8,
+                                child: IconButton(
+                                  icon: const Icon(Icons.cancel, color: Colors.white, size: 20),
+                                  padding: EdgeInsets.zero,
+                                  onPressed: () => _removeImage(index, photoIndex),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ],
             ),
           );

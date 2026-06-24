@@ -8,7 +8,7 @@ class ThemeStore extends ChangeNotifier {
   static final ThemeStore instance = ThemeStore._();
 
   static const String _keyThemeMode = 'theme_mode';
-  ThemeMode _themeMode = ThemeMode.dark;
+  ThemeMode _themeMode = ThemeMode.light;
 
   ThemeMode get themeMode => _themeMode;
 
@@ -16,7 +16,7 @@ class ThemeStore extends ChangeNotifier {
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    final isDark = prefs.getBool(_keyThemeMode) ?? true;
+    final isDark = prefs.getBool(_keyThemeMode) ?? false;
     _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
     notifyListeners();
   }

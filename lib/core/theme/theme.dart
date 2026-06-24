@@ -96,45 +96,45 @@ abstract final class AppColors {
 abstract final class AppLightColors {
   const AppLightColors._();
 
-  static const Color surface = Color(0xFFF8F9FA);
-  static const Color surfaceDim = Color(0xFFE9ECEF);
+  static const Color surface = Color(0xFFF9FAFB);
+  static const Color surfaceDim = Color(0xFFE5E7EB);
   static const Color surfaceBright = Color(0xFFFFFFFF);
   static const Color surfaceContainerLowest = Color(0xFFFFFFFF);
-  static const Color surfaceContainerLow = Color(0xFFF8F9FA);
-  static const Color surfaceContainer = Color(0xFFF1F3F5);
+  static const Color surfaceContainerLow = Color(0xFFF9FAFB);
+  static const Color surfaceContainer = Color(0xFFF3F4F6);
   static const Color surfaceContainerHigh = Color(0xFFFFFFFF); // White cards
-  static const Color surfaceContainerHighest = Color(0xFFDEE2E6);
-  static const Color surfaceVariant = Color(0xFFE9ECEF);
-  static const Color background = Color(0xFFF8F9FA);
+  static const Color surfaceContainerHighest = Color(0xFFE5E7EB);
+  static const Color surfaceVariant = Color(0xFFE5E7EB);
+  static const Color background = Color(0xFFF9FAFB);
 
-  static const Color onSurface = Color(0xFF212529);
-  static const Color onSurfaceVariant = Color(0xFF495057);
-  static const Color onBackground = Color(0xFF212529);
-  static const Color inverseSurface = Color(0xFF343A40);
-  static const Color inverseOnSurface = Color(0xFFF8F9FA);
+  static const Color onSurface = Color(0xFF111827);
+  static const Color onSurfaceVariant = Color(0xFF4B5563);
+  static const Color onBackground = Color(0xFF111827);
+  static const Color inverseSurface = Color(0xFF1F2937);
+  static const Color inverseOnSurface = Color(0xFFF9FAFB);
 
-  static const Color outline = Color(0xFFADB5BD);
-  static const Color outlineVariant = Color(0xFFDEE2E6);
+  static const Color outline = Color(0xFFD1D5DB);
+  static const Color outlineVariant = Color(0xFFE5E7EB);
 
   // Red
-  static const Color primary = Color(0xFFC94242);
+  static const Color primary = Color(0xFFDC2626); // red-600
   static const Color onPrimary = Color(0xFFFFFFFF);
-  static const Color primaryContainer = Color(0xFFE5484D);
-  static const Color onPrimaryContainer = Color(0xFFFFFFFF);
-  static const Color inversePrimary = Color(0xFFFFB3AE);
-  static const Color surfaceTint = Color(0xFFC94242);
+  static const Color primaryContainer = Color(0xFFFEF2F2); // red-50
+  static const Color onPrimaryContainer = Color(0xFFB91C1C); // red-700
+  static const Color inversePrimary = Color(0xFFFCA5A5);
+  static const Color surfaceTint = Color(0xFFDC2626);
 
-  static const Color secondary = Color(0xFF6C757D);
+  static const Color secondary = Color(0xFF6B7280);
   static const Color onSecondary = Color(0xFFFFFFFF);
-  static const Color secondaryContainer = Color(0xFFDEE2E6);
-  static const Color onSecondaryContainer = Color(0xFF343A40);
+  static const Color secondaryContainer = Color(0xFFE5E7EB);
+  static const Color onSecondaryContainer = Color(0xFF1F2937);
 
   static const Color error = Color(0xFFBA1A1A);
   static const Color onError = Color(0xFFFFFFFF);
   static const Color errorContainer = Color(0xFFFFDAD6);
   static const Color onErrorContainer = Color(0xFF410002);
 
-  static const Color placeholder = Color(0xFFADB5BD);
+  static const Color placeholder = Color(0xFF9CA3AF);
 }
 
 /// Semantic status / metric accent colors. These sit outside the core red
@@ -372,7 +372,7 @@ const ColorScheme _lightColorScheme = ColorScheme(
 abstract final class AppTheme {
   const AppTheme._();
 
-  static ColorScheme get colorScheme => _darkColorScheme;
+  static ColorScheme get colorScheme => _lightColorScheme;
 
   /// The single source-of-truth dark theme for Badar Tyres.
   static ThemeData get dark {
@@ -703,12 +703,12 @@ abstract final class AppTheme {
 
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppLightColors.primaryContainer,
-          foregroundColor: AppLightColors.onPrimaryContainer,
-          disabledBackgroundColor: AppLightColors.primaryContainer.withValues(alpha: 0.45),
-          disabledForegroundColor: AppLightColors.onPrimaryContainer.withValues(alpha: 0.8),
+          backgroundColor: AppLightColors.primary,
+          foregroundColor: AppLightColors.onPrimary,
+          disabledBackgroundColor: AppLightColors.primary.withValues(alpha: 0.45),
+          disabledForegroundColor: AppLightColors.onPrimary.withValues(alpha: 0.8),
           elevation: 0,
-          minimumSize: const Size.fromHeight(52),
+          minimumSize: const Size.fromHeight(60),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: const RoundedRectangleBorder(borderRadius: AppRadius.brBase),
           textStyle: AppTypography.labelSm.copyWith(
@@ -729,11 +729,11 @@ abstract final class AppTheme {
 
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppLightColors.primaryContainer,
+          foregroundColor: AppLightColors.primary,
           backgroundColor: Colors.transparent,
-          minimumSize: const Size.fromHeight(52),
+          minimumSize: const Size.fromHeight(60),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-          side: const BorderSide(color: AppLightColors.primaryContainer, width: 1.5),
+          side: const BorderSide(color: AppLightColors.primary, width: 1.5),
           shape: const RoundedRectangleBorder(borderRadius: AppRadius.brBase),
           textStyle: AppTypography.labelSm.copyWith(
             fontSize: 15,
@@ -745,16 +745,16 @@ abstract final class AppTheme {
 
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: AppLightColors.primaryContainer,
+          foregroundColor: AppLightColors.primary,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           shape: const RoundedRectangleBorder(borderRadius: AppRadius.brBase),
-          textStyle: AppTypography.bodyMd.copyWith(fontWeight: FontWeight.w600, color: AppLightColors.primaryContainer),
+          textStyle: AppTypography.bodyMd.copyWith(fontWeight: FontWeight.w600, color: AppLightColors.primary),
         ),
       ),
 
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: AppLightColors.primaryContainer,
-        foregroundColor: AppLightColors.onPrimaryContainer,
+        backgroundColor: AppLightColors.primary,
+        foregroundColor: AppLightColors.onPrimary,
         elevation: 0,
         focusElevation: 0,
         hoverElevation: 0,
@@ -828,9 +828,9 @@ abstract final class AppTheme {
       chipTheme: ChipThemeData(
         backgroundColor: AppLightColors.surfaceContainer,
         disabledColor: AppLightColors.surfaceContainerLowest,
-        selectedColor: AppLightColors.primaryContainer,
+        selectedColor: AppLightColors.primary,
         labelStyle: AppTypography.labelSm.copyWith(color: AppLightColors.onSurface),
-        secondaryLabelStyle: AppTypography.labelSm.copyWith(color: AppLightColors.onPrimaryContainer),
+        secondaryLabelStyle: AppTypography.labelSm.copyWith(color: AppLightColors.onPrimary),
         side: const BorderSide(color: AppLightColors.outlineVariant, width: 1),
         shape: const RoundedRectangleBorder(borderRadius: AppRadius.brFull),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

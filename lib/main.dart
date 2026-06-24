@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 import 'core/auth/session_store.dart';
 import 'core/theme/theme.dart';
@@ -10,6 +11,10 @@ import 'features/home/presentation/home_shell.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await Hive.initFlutter();
+  await Hive.openBox('job_cache');
+  await Hive.openBox('mutation_queue');
 
   await dotenv.load(fileName: ".env");
 

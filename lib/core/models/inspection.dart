@@ -2,13 +2,13 @@ class InspectionItem {
   final String system;
   final String condition;
   final String notes;
-  final String? photoUrl;
+  final List<String> photoUrls;
 
   InspectionItem({
     required this.system,
     required this.condition,
     required this.notes,
-    this.photoUrl,
+    this.photoUrls = const [],
   });
 
   factory InspectionItem.fromJson(Map<String, dynamic> json) {
@@ -16,7 +16,7 @@ class InspectionItem {
       system: json['system'] as String? ?? '',
       condition: json['condition'] as String? ?? 'Green',
       notes: json['notes'] as String? ?? '',
-      photoUrl: json['photoUrl'] as String?,
+      photoUrls: (json['photoUrls'] as List<dynamic>? ?? []).map((e) => e.toString()).toList(),
     );
   }
 
@@ -25,7 +25,7 @@ class InspectionItem {
       'system': system,
       'condition': condition,
       'notes': notes,
-      'photoUrl': photoUrl,
+      'photoUrls': photoUrls,
     };
   }
 }

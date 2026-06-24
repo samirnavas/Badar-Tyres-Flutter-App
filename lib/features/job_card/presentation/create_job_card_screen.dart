@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/models/service_item.dart';
@@ -26,6 +28,7 @@ class _CreateJobCardScreenState extends State<CreateJobCardScreen> {
   List<Map<String, dynamic>> _technicians = const [];
   Map<String, List<String>> _manufacturersMap = const {};
   bool _isSubmitting = false;
+  bool _isScanning = false;
 
   final _formKey = GlobalKey<FormState>();
 
@@ -109,6 +112,53 @@ class _CreateJobCardScreenState extends State<CreateJobCardScreen> {
       MaterialPageRoute(builder: (_) => const ServicesCatalogScreen()),
     );
     if (result != null) setState(() => _services.add(result));
+  }
+
+  Future<void> _scanVehiclePlate() async {
+    setState(() => _isScanning = true);
+    try {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(source: ImageSource.camera, imageQuality: 70);
+      if (pickedFile != null) {
+        final inputImage = InputImage.fromFilePath(pickedFile.path);
+        final textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
+        final RecognizedText recognizedText = await textRecognizer.processImage(inputImage);
+        
+        String bestMatch = '';
+        for (TextBlock block in recognizedText.blocks) {
+          String blockText = block.text.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+          if (blockText.length > bestMatch.length) {
+             bestMatch = blockText;
+          }
+        }
+        
+        if (bestMatch.isNotEmpty) {
+           _vehicleRegController.text = bestMatch;
+           if (mounted) {
+             ScaffoldMessenger.of(context).showSnackBar(
+               SnackBar(content: Text('Scanned Plate: $bestMatch')),
+             );
+           }
+        } else {
+           if (mounted) {
+             ScaffoldMessenger.of(context).showSnackBar(
+               const SnackBar(content: Text('Could not detect text.')),
+             );
+           }
+        }
+        textRecognizer.close();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to scan: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isScanning = false);
+      }
+    }
   }
 
   Future<void> _create() async {
@@ -211,16 +261,33 @@ class _CreateJobCardScreenState extends State<CreateJobCardScreen> {
             _FormSection(
               title: 'Vehicle Details',
               children: [
-                _RadioGroup(
-                  label: 'Vehicle Type',
-                  options: const ['Car', 'Bike', 'Others'],
-                  value: _vehicleType,
-                  onChanged: (v) {
-                    setState(() {
-                      _vehicleType = v;
-                      _manufacturer = null; // Reset when type changes
-                    });
-                  },
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _RadioGroup(
+                        label: 'Vehicle Type',
+                        options: const ['Car', 'Bike', 'Others'],
+                        value: _vehicleType,
+                        onChanged: (v) {
+                          setState(() {
+                            _vehicleType = v;
+                            _manufacturer = null; // Reset when type changes
+                          });
+                        },
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _isScanning ? null : _scanVehiclePlate,
+                      icon: _isScanning 
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.document_scanner),
+                      label: Text(_isScanning ? 'Scanning...' : 'Scan VIN/Plate'),
+                      style: OutlinedButton.styleFrom(
+                         foregroundColor: context.colors.primaryContainer,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: AppSpacing.stackMd),
                 CustomTextField(

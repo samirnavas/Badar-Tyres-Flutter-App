@@ -1,11 +1,17 @@
 import 'dart:convert';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../api/api_client.dart';
+import '../models/job.dart';
+import '../models/inspection.dart';
 
 class SyncManager {
-  static const _queueKey = 'offline_mutation_queue';
   final _supabase = Supabase.instance.client;
+  final _apiClient = ApiClient();
+  
+  Box get _jobCache => Hive.box('job_cache');
+  Box get _queue => Hive.box('mutation_queue');
 
   String get _userId {
     final id = _supabase.auth.currentUser?.id;
@@ -27,13 +33,27 @@ class SyncManager {
     }
   }
 
+  // --- JOB CACHING ---
+  Future<void> cacheJobs(List<Job> jobs) async {
+    await _jobCache.clear();
+    final Map<String, String> data = {};
+    for (final job in jobs) {
+      data[job.id] = jsonEncode(job.toJson());
+    }
+    await _jobCache.putAll(data);
+  }
+
+  List<Job> getCachedJobs() {
+    return _jobCache.values.map((v) => Job.fromJson(jsonDecode(v))).toList();
+  }
+
+  // --- OFFLINE MUTATIONS ---
   Future<void> enqueueJobStatus(String jobId, String status) async {
     await _enqueue({
       'type': 'job_status',
       'id': jobId,
       'value': status,
     });
-    _attemptSync(); // Immediately attempt just in case we are online
   }
 
   Future<void> enqueueServiceStatus(String serviceId, bool isCompleted) async {
@@ -42,24 +62,33 @@ class SyncManager {
       'id': serviceId,
       'value': isCompleted,
     });
-    _attemptSync(); // Immediately attempt just in case we are online
+  }
+
+  Future<void> enqueueDviInspection(InspectionReport report) async {
+    await _enqueue({
+      'type': 'dvi_inspection',
+      'id': report.jobId,
+      'value': report.toJson(),
+    });
   }
 
   Future<void> _enqueue(Map<String, dynamic> payload) async {
-    final prefs = await SharedPreferences.getInstance();
-    final queue = prefs.getStringList(_queueKey) ?? [];
-    queue.add(jsonEncode(payload));
-    await prefs.setStringList(_queueKey, queue);
+    await _queue.add(jsonEncode(payload));
+    _attemptSync(); // Immediately attempt just in case we are online
   }
 
   Future<void> _attemptSync() async {
-    final prefs = await SharedPreferences.getInstance();
-    final queue = prefs.getStringList(_queueKey) ?? [];
-    if (queue.isEmpty) return;
+    if (_queue.isEmpty) return;
 
-    final List<String> failedQueue = [];
+    final results = await Connectivity().checkConnectivity();
+    if (results.isEmpty || results.first == ConnectivityResult.none) return;
 
-    for (final item in queue) {
+    final keys = _queue.keys.toList();
+
+    for (final key in keys) {
+      final item = _queue.get(key);
+      if (item == null) continue;
+
       try {
         final payload = jsonDecode(item) as Map<String, dynamic>;
         final type = payload['type'];
@@ -67,23 +96,26 @@ class SyncManager {
         final value = payload['value'];
 
         if (type == 'job_status') {
-          await _supabase
-              .from('jobs')
-              .update({'status': value})
-              .eq('id', id)
-              .eq('technician_id', _userId);
+          await _apiClient.postJson('sync/job_status', {
+             'id': id,
+             'technician_id': _userId,
+             'status': value,
+          });
         } else if (type == 'service_status') {
-          await _supabase
-              .from('invoices')
-              .update({'is_completed': value})
-              .eq('id', id);
+          await _apiClient.postJson('sync/service_status', {
+             'id': id,
+             'is_completed': value,
+          });
+        } else if (type == 'dvi_inspection') {
+          await _apiClient.postJson('sync/dvi_inspection', value);
         }
+        
+        // If successful, remove from queue
+        await _queue.delete(key);
       } catch (e) {
-        // If it fails (e.g. network still down despite Connectivity saying otherwise), keep it in queue
-        failedQueue.add(item);
+        // If it fails due to network/server, keep it in queue for next time.
+        // It will just continue and try the next item (or fail as well).
       }
     }
-
-    await prefs.setStringList(_queueKey, failedQueue);
   }
 }

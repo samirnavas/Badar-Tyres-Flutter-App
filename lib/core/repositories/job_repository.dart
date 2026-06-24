@@ -69,16 +69,23 @@ class JobRepository {
       }
 
       final data = await query;
-      debugPrint('--- RAW SUPABASE JOBS ---');
-      debugPrint(data.toString());
-      debugPrint('-------------------------');
-      
-      return data.map((e) => Job.fromJson(e)).toList();
-    } catch (e, stacktrace) {
-      debugPrint('!!! REPOSITORY ERROR !!!');
-      debugPrint(e.toString());
-      debugPrint(stacktrace.toString());
-      throw Exception('Failed to fetch active jobs: $e');
+      final jobs = data.map((e) => Job.fromJson(e)).toList();
+      await _syncManager.cacheJobs(jobs);
+      return jobs;
+    } catch (e) {
+      debugPrint('Fetching jobs failed, falling back to cache: $e');
+      final cached = _syncManager.getCachedJobs();
+      if (cached.isNotEmpty) {
+        var filtered = cached;
+        if (status != 'all') {
+          filtered = filtered.where((j) => j.status.name == status).toList();
+        }
+        if (search.isNotEmpty) {
+           filtered = filtered.where((j) => j.jobNumber.toLowerCase().contains(search.toLowerCase())).toList();
+        }
+        return filtered;
+      }
+      throw Exception('Failed to fetch active jobs and cache is empty: $e');
     }
   }
 
@@ -99,17 +106,41 @@ class JobRepository {
 
   Future<void> updateJobStatus(String jobId, String status) async {
     try {
-      await _supabase.from('jobs').update({'status': status}).eq('id', jobId);
+      await _syncManager.enqueueJobStatus(jobId, status);
     } catch (e) {
-      throw Exception('Failed to update job status. Please check your connection.');
+      throw Exception('Failed to enqueue job status: $e');
+    }
+  }
+
+  Future<void> startJob(String jobId) async {
+    try {
+      await _syncManager.enqueueJobStatus(jobId, JobStatus.running.name);
+    } catch (e) {
+      throw Exception('Failed to start job locally: $e');
+    }
+  }
+
+  Future<void> pauseJob(String jobId, JobStatus reasonStatus) async {
+    try {
+      await _syncManager.enqueueJobStatus(jobId, reasonStatus.name);
+    } catch (e) {
+      throw Exception('Failed to pause job locally: $e');
+    }
+  }
+
+  Future<void> completeJob(String jobId) async {
+    try {
+      await _syncManager.enqueueJobStatus(jobId, JobStatus.completed.name);
+    } catch (e) {
+      throw Exception('Failed to complete job locally: $e');
     }
   }
 
   Future<void> updateServiceStatus(String serviceId, bool isCompleted) async {
     try {
-      await _supabase.from('invoices').update({'is_completed': isCompleted}).eq('id', serviceId);
+      await _syncManager.enqueueServiceStatus(serviceId, isCompleted);
     } catch (e) {
-      throw Exception('Failed to update service status. Please check your connection.');
+      throw Exception('Failed to enqueue service status: $e');
     }
   }
 
