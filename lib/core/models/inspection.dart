@@ -103,4 +103,17 @@ class InspectionReport {
       'items': items.map((e) => e.toJson()).toList(),
     };
   }
+
+  factory InspectionReport.fromSupabaseRow(Map<String, dynamic> json) {
+    return InspectionReport(
+      id: json['id'] as String?,
+      jobId: json['job_id'] as String? ?? '',
+      technicianId: json['technician_id'] as String? ?? '',
+      vehicleId: json['vehicle_id'] as String? ?? '',
+      status: json['status'] as String? ?? 'Draft',
+      items: (json['items'] as List<dynamic>? ?? [])
+          .map((e) => InspectionItem.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
+    );
+  }
 }

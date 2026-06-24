@@ -1,51 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 
-import '../models/job_status.dart';
 import '../theme/theme.dart';
+import 'job_list_tile.dart';
 
-export '../models/job_status.dart';
-
-extension JobStatusVisuals on JobStatus {
-  String get label => switch (this) {
-        JobStatus.pending => 'Pending',
-        JobStatus.inProgress => 'In Progress',
-        JobStatus.onHold => 'On Hold',
-        JobStatus.completed => 'Completed',
-      };
-
-  Color get color => switch (this) {
-        JobStatus.pending => AppStatusColors.pending,
-        JobStatus.inProgress => AppStatusColors.running,
-        JobStatus.onHold => AppStatusColors.delayed,
-        JobStatus.completed => AppStatusColors.completed,
-      };
-
-  IconData get icon => switch (this) {
-        JobStatus.pending => Icons.hourglass_empty,
-        JobStatus.inProgress => Icons.play_circle_outline,
-        JobStatus.onHold => Icons.pause_circle_outline,
-        JobStatus.completed => Icons.check_circle_outline,
-      };
-}
-
-bool _isDelayedJob(JobStatus status, String? delay) {
-  if (status == JobStatus.onHold) return true;
-
-  final normalized = delay?.trim().toLowerCase();
-  if (normalized == null || normalized.isEmpty || normalized == '-') {
-    return false;
-  }
-
-  return normalized != '0' &&
-      normalized != '0 min' &&
-      !normalized.startsWith('0 min');
-}
-
-/// A rich job-card row for the Jobs list. Shows the job number, customer and
-/// vehicle, status pill, scheduled time, and assigned technician.
-class JobListTile extends StatelessWidget {
-  const JobListTile({
+/// Directory row for the global Jobs screen — shows shop-wide assignment.
+class JobDirectoryListTile extends StatelessWidget {
+  const JobDirectoryListTile({
     super.key,
     required this.jobNumber,
     required this.customerName,
@@ -55,6 +16,7 @@ class JobListTile extends StatelessWidget {
     required this.time,
     required this.date,
     required this.technician,
+    this.bayName,
     required this.startTime,
     required this.expectedEnd,
     this.actualEnd,
@@ -68,23 +30,14 @@ class JobListTile extends StatelessWidget {
   final String vehicleModel;
   final String vehicleNumber;
   final JobStatus status;
-
-  /// Scheduled time, e.g. "11:30 AM".
   final String time;
-
-  /// Display date, e.g. "15 MAY 2024".
   final String date;
-
   final String technician;
+  final String? bayName;
   final String startTime;
   final String expectedEnd;
-
-  /// Actual end time; `null` renders as "-".
   final String? actualEnd;
-
-  /// Delay readout, e.g. "45 Min" / "0 Min"; `null` renders as "-".
   final String? delay;
-
   final VoidCallback? onTap;
   final void Function(JobStatus)? onStatusChange;
 
@@ -94,9 +47,21 @@ class JobListTile extends StatelessWidget {
   bool get _canMarkComplete =>
       status == JobStatus.inProgress && onStatusChange != null;
 
+  String get _assignmentLabel {
+    final tech = technician.trim();
+    final bay = bayName?.trim();
+    final hasTech = tech.isNotEmpty && tech != '-';
+    final hasBay = bay != null && bay.isNotEmpty;
+
+    if (hasTech && hasBay) return '$tech • $bay';
+    if (hasTech) return tech;
+    if (hasBay) return bay;
+    return 'Unassigned';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final card = _JobCard(
+    final card = _DirectoryJobCard(
       jobNumber: jobNumber,
       customerName: customerName,
       vehicleModel: vehicleModel,
@@ -104,7 +69,7 @@ class JobListTile extends StatelessWidget {
       status: status,
       time: time,
       date: date,
-      technician: technician,
+      assignmentLabel: _assignmentLabel,
       delay: delay,
       onTap: onTap,
     );
@@ -113,7 +78,7 @@ class JobListTile extends StatelessWidget {
 
     return Slidable(
       key: key ?? ValueKey(jobNumber),
-      groupTag: 'jobs',
+      groupTag: 'jobs-directory',
       startActionPane: _canMarkComplete
           ? ActionPane(
               motion: const DrawerMotion(),
@@ -163,8 +128,8 @@ class JobListTile extends StatelessWidget {
   }
 }
 
-class _JobCard extends StatelessWidget {
-  const _JobCard({
+class _DirectoryJobCard extends StatelessWidget {
+  const _DirectoryJobCard({
     required this.jobNumber,
     required this.customerName,
     required this.vehicleModel,
@@ -172,7 +137,7 @@ class _JobCard extends StatelessWidget {
     required this.status,
     required this.time,
     required this.date,
-    required this.technician,
+    required this.assignmentLabel,
     this.delay,
     this.onTap,
   });
@@ -184,7 +149,7 @@ class _JobCard extends StatelessWidget {
   final JobStatus status;
   final String time;
   final String date;
-  final String technician;
+  final String assignmentLabel;
   final String? delay;
   final VoidCallback? onTap;
 
@@ -193,31 +158,23 @@ class _JobCard extends StatelessWidget {
     final colors = context.colors;
     final muted = colors.onSurfaceVariant;
     final isDelayed = _isDelayedJob(status, delay);
-    final String regNum = vehicleNumber.trim();
-    final String formattedVehicleNumber =
-        (regNum.toUpperCase() == 'N/A' || regNum.isEmpty)
-            ? 'Unregistered'
-            : regNum;
+    final regNum = vehicleNumber.trim();
+    final registration =
+        (regNum.toUpperCase() == 'N/A' || regNum.isEmpty) ? 'Unregistered' : regNum;
 
     return Material(
       elevation: 0,
       color: colors.surfaceContainerHigh,
       shape: RoundedRectangleBorder(
         borderRadius: AppRadius.brLg,
-        side: BorderSide(
-          color: colors.outlineVariant,
-          width: 1,
-        ),
+        side: BorderSide(color: colors.outlineVariant),
       ),
       clipBehavior: Clip.antiAlias,
       child: DecoratedBox(
         decoration: BoxDecoration(
           border: isDelayed
               ? const Border(
-                  left: BorderSide(
-                    color: AppStatusColors.delayed,
-                    width: 3,
-                  ),
+                  left: BorderSide(color: AppStatusColors.delayed, width: 3),
                 )
               : null,
         ),
@@ -243,7 +200,7 @@ class _JobCard extends StatelessWidget {
                 ),
                 const SizedBox(height: AppSpacing.stackMd),
                 Text(
-                  formattedVehicleNumber,
+                  registration,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: context.typography.titleSm.copyWith(
@@ -272,57 +229,28 @@ class _JobCard extends StatelessWidget {
                 ],
                 const SizedBox(height: AppSpacing.stackMd),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
+                    Icon(Icons.badge_outlined, size: 14, color: muted),
+                    const SizedBox(width: 4),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Technician',
-                            style: context.typography.labelSm.copyWith(
-                              letterSpacing: 0,
-                              color: muted,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            technician,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: context.typography.bodyMd.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
+                      child: Text(
+                        assignmentLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.typography.labelSm.copyWith(
+                          color: muted,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.access_time, size: 14, color: muted),
-                            const SizedBox(width: 4),
-                            Text(
-                              time,
-                              style: context.typography.bodyMd.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          date,
-                          style: context.typography.labelSm.copyWith(
-                            letterSpacing: 0,
-                            color: muted,
-                          ),
-                        ),
-                      ],
+                    const SizedBox(width: AppSpacing.base),
+                    Icon(Icons.access_time, size: 14, color: muted),
+                    const SizedBox(width: 4),
+                    Text(
+                      time,
+                      style: context.typography.bodyMd.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ],
                 ),
@@ -358,4 +286,17 @@ class _StatusPill extends StatelessWidget {
       ),
     );
   }
+}
+
+bool _isDelayedJob(JobStatus status, String? delay) {
+  if (status == JobStatus.onHold) return true;
+
+  final normalized = delay?.trim().toLowerCase();
+  if (normalized == null || normalized.isEmpty || normalized == '-') {
+    return false;
+  }
+
+  return normalized != '0' &&
+      normalized != '0 min' &&
+      !normalized.startsWith('0 min');
 }

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../auth/session_store.dart';
 import '../models/job.dart';
 import '../models/inspection.dart';
 
@@ -12,7 +13,7 @@ class SyncManager {
   Box get _queue => Hive.box('mutation_queue');
 
   String get _userId {
-    final id = _supabase.auth.currentUser?.id;
+    final id = SessionStore.currentUser?.id;
     if (id == null) throw Exception('User not logged in');
     return id;
   }
@@ -131,10 +132,38 @@ class SyncManager {
               .eq('id', id)
               .eq('technician_id', _userId);
         } else if (type == 'job_step') {
-          await _updateJobStepInLineItems(
-            jobId: id as String,
-            stepId: payload['step_id'] as String,
-            isCompleted: value as bool,
+          final stepId = payload['step_id'] as String;
+          final isCompleted = value as bool;
+          final row = await _supabase
+              .from('jobs')
+              .select('line_items')
+              .eq('id', id)
+              .eq('technician_id', _userId)
+              .single();
+          final job = Job.fromJson({
+            'id': id,
+            'line_items': row['line_items'],
+          });
+          final updatedSteps = job.steps
+              .map(
+                (step) => step.id == stepId
+                    ? step.copyWith(
+                        isCompleted: isCompleted,
+                        completedAt:
+                            isCompleted ? DateTime.now() : null,
+                        clearCompletedAt: !isCompleted,
+                      )
+                    : step,
+              )
+              .toList();
+          await _supabase.rpc(
+            'update_job_checklist',
+            params: {
+              'p_job_id': id,
+              'p_technician_id': _userId,
+              'p_checklist':
+                  updatedSteps.map((step) => step.toJson()).toList(),
+            },
           );
         } else if (type == 'service_status') {
           await _updateServiceInLineItems(
@@ -143,8 +172,16 @@ class SyncManager {
           );
         } else if (type == 'dvi_inspection') {
           final row = Map<String, dynamic>.from(value as Map);
-          row['technician_id'] ??= _userId;
-          await _supabase.from('inspections').insert(row);
+          await _supabase.rpc(
+            'upsert_job_inspection',
+            params: {
+              'p_job_id': id,
+              'p_technician_id': row['technician_id'] ?? _userId,
+              'p_vehicle_id': row['vehicle_id'],
+              'p_status': row['status'] ?? 'Draft',
+              'p_items': row['items'] ?? [],
+            },
+          );
         }
         
         // If successful, remove from queue
@@ -153,32 +190,6 @@ class SyncManager {
         // If it fails due to network/server, keep it in queue for next time.
       }
     }
-  }
-
-  Future<void> _updateJobStepInLineItems({
-    required String jobId,
-    required String stepId,
-    required bool isCompleted,
-  }) async {
-    final row = await _supabase
-        .from('jobs')
-        .select('line_items')
-        .eq('id', jobId)
-        .eq('technician_id', _userId)
-        .single();
-
-    final updated = _toggleCompletionInLineItems(
-      row['line_items'],
-      matchId: stepId,
-      isCompleted: isCompleted,
-    );
-    if (updated == null) return;
-
-    await _supabase
-        .from('jobs')
-        .update({'line_items': updated})
-        .eq('id', jobId)
-        .eq('technician_id', _userId);
   }
 
   Future<void> _updateServiceInLineItems({

@@ -5,21 +5,16 @@ import 'package:flutter/material.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/auth/session_store.dart';
 import '../../../core/models/job.dart';
-import '../../../core/models/job_metrics.dart';
 import '../../../core/repositories/job_repository.dart';
 import '../../../core/theme/theme.dart';
 import '../../../core/widgets/custom_text_field.dart';
-import '../../../core/widgets/job_list_tile.dart';
-import '../../../core/widgets/metric_card.dart';
+import '../../../core/widgets/job_directory_list_tile.dart';
 import '../../job_card/presentation/job_card_preview_screen.dart';
 
-/// The Jobs dashboard: summary metric cards, a sticky filter tab bar
-/// (All Jobs / Running / Completed / Delayed), a search field, and the
-/// filtered list of job cards — all backed by the mock REST API.
-///
-/// Hosted inside the app's `HomeShell`, which owns the bottom navigation and
-/// the central "Create Job" action. Bumping [refreshTick] (e.g. after a job is
-/// created elsewhere) triggers a reload of the metrics and job list.
+const _jobsStickyHeaderHeight = 120.0;
+
+/// The Jobs directory: shop-wide search and status filters with assignment
+/// visibility on each row. Hosted inside the app's `HomeShell`.
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key, this.refreshTick = 0});
 
@@ -39,9 +34,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   final _searchController = TextEditingController();
   Timer? _debounce;
 
-  JobMetrics _metrics = JobMetrics.empty;
   List<Job> _jobs = const [];
-  bool _loadingMetrics = true;
   bool _loadingJobs = true;
   String? _error;
   String _query = '';
@@ -53,14 +46,13 @@ class _DashboardScreenState extends State<DashboardScreen>
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) _loadJobs();
     });
-    _loadMetrics();
     _loadJobs();
   }
 
   @override
   void didUpdateWidget(covariant DashboardScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.refreshTick != oldWidget.refreshTick) _refreshAll();
+    if (widget.refreshTick != oldWidget.refreshTick) _loadJobs();
   }
 
   @override
@@ -72,26 +64,13 @@ class _DashboardScreenState extends State<DashboardScreen>
     super.dispose();
   }
 
-  Future<void> _loadMetrics() async {
-    setState(() => _loadingMetrics = true);
-    try {
-      final metrics = await _repository.fetchMetrics();
-      if (!mounted) return;
-      setState(() => _metrics = metrics);
-    } on ApiException {
-      // Surfaced via the jobs error state; keep last-known metrics.
-    } finally {
-      if (mounted) setState(() => _loadingMetrics = false);
-    }
-  }
-
   Future<void> _loadJobs() async {
     setState(() {
       _loadingJobs = true;
       _error = null;
     });
     try {
-      final jobs = await _repository.fetchJobs(
+      final jobs = await _repository.fetchAllJobs(
         status: _statusParams[_tabController.index],
         search: _query,
       );
@@ -105,8 +84,47 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
-  Future<void> _refreshAll() async {
-    await Future.wait([_loadMetrics(), _loadJobs()]);
+  Future<void> _handleStatusChange(Job job, JobStatus newStatus) async {
+    setState(() {
+      final index = _jobs.indexWhere((j) => j.id == job.id);
+      if (index == -1) return;
+
+      var newStartTime = job.startTime;
+      var newActualEnd = job.actualEnd;
+      final now =
+          '${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')}';
+
+      if (newStatus == JobStatus.inProgress &&
+          job.status != JobStatus.inProgress) {
+        if (job.startTime == '-') newStartTime = now;
+      } else if (newStatus == JobStatus.completed) {
+        newActualEnd = now;
+      }
+
+      final updated = [..._jobs];
+      updated[index] = job.copyWith(
+        status: newStatus,
+        startTime: newStartTime,
+        actualEnd: newActualEnd,
+      );
+      _jobs = updated;
+    });
+
+    try {
+      if (newStatus == JobStatus.inProgress) {
+        await _repository.startJob(job.id);
+      } else if (newStatus == JobStatus.completed) {
+        await _repository.completeJob(job.id);
+      } else {
+        await _repository.updateJobStatus(job.id, newStatus);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to update job: $e')));
+      await _loadJobs();
+    }
   }
 
   void _onSearchChanged(String value) {
@@ -115,69 +133,214 @@ class _DashboardScreenState extends State<DashboardScreen>
     _debounce = Timer(const Duration(milliseconds: 350), _loadJobs);
   }
 
-  String _metric(int value) =>
-      (_loadingMetrics && _metrics.totalJobs == 0) ? '—' : '$value';
+  void _onFilterTap() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    // Reserved for advanced job filter sheet.
+  }
+
+  TabBar _buildTabBar(BuildContext context) {
+    final colors = context.colors;
+
+    return TabBar(
+      controller: _tabController,
+      isScrollable: true,
+      tabAlignment: TabAlignment.start,
+      indicatorSize: TabBarIndicatorSize.tab,
+      indicator: BoxDecoration(
+        color: AppBrand.badarRed,
+        borderRadius: AppRadius.brBase,
+      ),
+      dividerColor: colors.outlineVariant,
+      dividerHeight: 0,
+      labelColor: Colors.white,
+      unselectedLabelColor: colors.onSurfaceVariant,
+      labelStyle: context.typography.bodyMd.copyWith(
+        fontWeight: FontWeight.w600,
+      ),
+      unselectedLabelStyle: context.typography.bodyMd,
+      labelPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+      tabs: [
+        for (final t in _tabs)
+          Tab(
+            height: 34,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+              child: Text(t),
+            ),
+          ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final isTech = SessionStore.currentUser?.role == 'Technician';
+    final colors = context.colors;
 
     return Scaffold(
-      backgroundColor: context.colors.surface,
-      appBar: isTech
-          ? null
-          : AppBar(
-              leading: IconButton(
-                icon: const Icon(Icons.menu),
-                onPressed: () {},
-              ),
-              title: const Text('Jobs'),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.notifications_none_rounded),
-                  onPressed: () {},
-                ),
-                const SizedBox(width: AppSpacing.base),
-              ],
-            ),
+      backgroundColor: colors.surface,
       body: GestureDetector(
         onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
         behavior: HitTestBehavior.opaque,
-        child: RefreshIndicator(
-          color: context.colors.primary,
-          backgroundColor: context.colors.surfaceContainerHigh,
-          onRefresh: _refreshAll,
-          child: CustomScrollView(
-            slivers: [
-            SliverToBoxAdapter(child: _buildMetrics()),
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: _PinnedTabBarDelegate(
-                TabBar(
-                  controller: _tabController,
-                  isScrollable: true,
-                  tabAlignment: TabAlignment.start,
-                  indicatorSize: TabBarIndicatorSize.label,
-                  indicatorColor: context.colors.primaryContainer,
-                  indicatorWeight: 2.5,
-                  dividerColor: Colors.transparent,
-                  labelColor: context.colors.primaryContainer,
-                  unselectedLabelColor: context.colors.secondary,
-                  labelStyle: context.typography.bodyMd
-                      .copyWith(fontWeight: FontWeight.w600),
-                  unselectedLabelStyle: context.typography.bodyMd,
-                  labelPadding:
-                      const EdgeInsets.only(right: AppSpacing.stackLg),
-                  tabs: [for (final t in _tabs) Tab(text: t)],
-                ),
-              ),
-            ),
-            SliverToBoxAdapter(child: _buildSearch()),
-            _buildContent(),
-          ],
+        child: isTech ? _buildTechnicianBody(colors) : _buildAdminBody(colors),
+      ),
+    );
+  }
+
+  Widget _buildTechnicianBody(ColorScheme colors) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _JobsFilterHeader(
+          tabBar: _buildTabBar(context),
+          searchController: _searchController,
+          onSearchChanged: _onSearchChanged,
+          onFilterTap: _onFilterTap,
+          compactTop: true,
         ),
+        Expanded(
+          child: RefreshIndicator(
+            color: colors.primary,
+            backgroundColor: colors.surfaceContainerHigh,
+            onRefresh: _loadJobs,
+            child: _buildJobsListView(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAdminBody(ColorScheme colors) {
+    return NestedScrollView(
+      headerSliverBuilder: (context, innerBoxIsScrolled) => [
+        SliverOverlapAbsorber(
+          handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
+          sliver: SliverAppBar(
+            pinned: true,
+            floating: false,
+            snap: false,
+            forceElevated: innerBoxIsScrolled,
+            backgroundColor: colors.surface,
+            surfaceTintColor: colors.surfaceTint,
+            leading: IconButton(
+              icon: const Icon(Icons.menu),
+              onPressed: () {},
+            ),
+            title: const Text('Jobs'),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.notifications_none_rounded),
+                onPressed: () {},
+              ),
+              const SizedBox(width: AppSpacing.base),
+            ],
+            toolbarHeight: kToolbarHeight,
+            collapsedHeight: kToolbarHeight,
+            bottom: _JobsStickyHeader(
+              tabBar: _buildTabBar(context),
+              searchController: _searchController,
+              onSearchChanged: _onSearchChanged,
+              onFilterTap: _onFilterTap,
+            ),
+          ),
+        ),
+      ],
+      body: Builder(
+        builder: (context) {
+          return RefreshIndicator(
+            color: colors.primary,
+            backgroundColor: colors.surfaceContainerHigh,
+            onRefresh: _loadJobs,
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverOverlapInjector(
+                  handle: NestedScrollView.sliverOverlapAbsorberHandleFor(
+                    context,
+                  ),
+                ),
+                _buildContent(),
+              ],
+            ),
+          );
+        },
       ),
+    );
+  }
+
+  Widget _buildJobsListView() {
+    if (_error != null) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          SizedBox(
+            height: 320,
+            child: _ErrorState(message: _error!, onRetry: _loadJobs),
+          ),
+        ],
+      );
+    }
+    if (_loadingJobs) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          SizedBox(
+            height: 320,
+            child: Center(
+              child: CircularProgressIndicator(color: context.colors.primary),
+            ),
+          ),
+        ],
+      );
+    }
+    if (_jobs.isEmpty) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: const [
+          SizedBox(height: 320, child: _EmptyState()),
+        ],
+      );
+    }
+    return ListView.separated(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.containerPadding,
+        AppSpacing.stackMd,
+        AppSpacing.containerPadding,
+        AppSpacing.stackLg,
       ),
+      itemCount: _jobs.length,
+      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.gutter),
+      itemBuilder: (context, i) => _buildJobTile(_jobs[i]),
+    );
+  }
+
+  Widget _buildJobTile(Job j) {
+    return JobDirectoryListTile(
+      key: ValueKey(j.id),
+      jobNumber: j.jobNumber,
+      customerName: j.customerName,
+      vehicleModel: j.vehicleModel,
+      vehicleNumber: j.vehicleNumber,
+      status: j.status,
+      time: j.time,
+      date: j.date,
+      technician: j.technician,
+      bayName: j.bayName,
+      startTime: j.startTime,
+      expectedEnd: j.expectedEnd,
+      actualEnd: j.actualEnd,
+      delay: j.delay,
+      onTap: () async {
+        FocusManager.instance.primaryFocus?.unfocus();
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => JobExecutionScreen(job: j)),
+        );
+        if (context.mounted) {
+          FocusManager.instance.primaryFocus?.unfocus();
+        }
+      },
+      onStatusChange: (newStatus) => _handleStatusChange(j, newStatus),
     );
   }
 
@@ -185,7 +348,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     if (_error != null) {
       return SliverFillRemaining(
         hasScrollBody: false,
-        child: _ErrorState(message: _error!, onRetry: _refreshAll),
+        child: _ErrorState(message: _error!, onRetry: _loadJobs),
       );
     }
     if (_loadingJobs) {
@@ -208,132 +371,100 @@ class _DashboardScreenState extends State<DashboardScreen>
     return SliverPadding(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.containerPadding,
-        0,
+        AppSpacing.stackMd,
         AppSpacing.containerPadding,
         AppSpacing.stackLg,
       ),
       sliver: SliverList.separated(
         itemCount: _jobs.length,
         separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.gutter),
-        itemBuilder: (context, i) {
-          final j = _jobs[i];
-          return JobListTile(
-            jobNumber: j.jobNumber,
-            customerName: j.customerName,
-            vehicleModel: j.vehicleModel,
-            vehicleNumber: j.vehicleNumber,
-            status: j.status,
-            time: j.time,
-            date: j.date,
-            technician: j.technician,
-            startTime: j.startTime,
-            expectedEnd: j.expectedEnd,
-            actualEnd: j.actualEnd,
-            delay: j.delay,
-            onTap: () async {
-              FocusManager.instance.primaryFocus?.unfocus();
-              await Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => JobExecutionScreen(job: j),
-                ),
-              );
-              if (context.mounted) {
-                FocusManager.instance.primaryFocus?.unfocus();
-              }
-            },
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildMetrics() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.containerPadding,
-        AppSpacing.stackMd,
-        AppSpacing.containerPadding,
-        AppSpacing.base,
-      ),
-      child: GridView.count(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        crossAxisCount: 2,
-        crossAxisSpacing: AppSpacing.gutter,
-        mainAxisSpacing: AppSpacing.gutter,
-        childAspectRatio: 2.2,
-        children: [
-          MetricCard.totalJobs(value: _metric(_metrics.totalJobs)),
-          MetricCard.running(value: _metric(_metrics.running)),
-          MetricCard.completed(value: _metric(_metrics.completed)),
-          MetricCard.delayed(value: _metric(_metrics.delayed)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSearch() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.containerPadding,
-        AppSpacing.stackMd,
-        AppSpacing.containerPadding,
-        AppSpacing.stackMd,
-      ),
-      child: CustomTextField(
-        controller: _searchController,
-        hint: 'Enter Mobile Number or Vehicle Number',
-        prefixIcon: Icons.search,
-        keyboardType: TextInputType.text,
-        onChanged: _onSearchChanged,
+        itemBuilder: (context, i) => _buildJobTile(_jobs[i]),
       ),
     );
   }
 }
 
-/// Pins the filter [TabBar] below the metric cards while the list scrolls.
-class _PinnedTabBarDelegate extends SliverPersistentHeaderDelegate {
-  _PinnedTabBarDelegate(this.tabBar);
+/// Search field and status tabs pinned at the top of the Jobs directory.
+class _JobsStickyHeader extends StatelessWidget implements PreferredSizeWidget {
+  const _JobsStickyHeader({
+    required this.tabBar,
+    required this.searchController,
+    required this.onSearchChanged,
+    required this.onFilterTap,
+  });
 
   final TabBar tabBar;
-  static const double _height = 50;
+  final TextEditingController searchController;
+  final ValueChanged<String> onSearchChanged;
+  final VoidCallback onFilterTap;
 
   @override
-  double get minExtent => _height;
+  Size get preferredSize => const Size.fromHeight(_jobsStickyHeaderHeight);
 
   @override
-  double get maxExtent => _height;
+  Widget build(BuildContext context) {
+    return _JobsFilterHeader(
+      tabBar: tabBar,
+      searchController: searchController,
+      onSearchChanged: onSearchChanged,
+      onFilterTap: onFilterTap,
+    );
+  }
+}
+
+class _JobsFilterHeader extends StatelessWidget {
+  const _JobsFilterHeader({
+    required this.tabBar,
+    required this.searchController,
+    required this.onSearchChanged,
+    required this.onFilterTap,
+    this.compactTop = false,
+  });
+
+  final TabBar tabBar;
+  final TextEditingController searchController;
+  final ValueChanged<String> onSearchChanged;
+  final VoidCallback onFilterTap;
+  final bool compactTop;
 
   @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) {
-    return Container(
-      height: _height,
+  Widget build(BuildContext context) {
+    return Material(
       color: context.colors.surface,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.containerPadding,
-      ),
-      alignment: Alignment.centerLeft,
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(child: tabBar),
-          Divider(
-            height: 1,
-            thickness: 1,
-            color: context.colors.surfaceContainerHigh,
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.containerPadding,
+              compactTop ? 0 : AppSpacing.base,
+              AppSpacing.containerPadding,
+              AppSpacing.base,
+            ),
+            child: CustomTextField(
+              controller: searchController,
+              hint: 'Search vehicle, mobile, or job number',
+              prefixIcon: Icons.search,
+              suffixIcon: Icons.tune_rounded,
+              onSuffixTap: onFilterTap,
+              keyboardType: TextInputType.text,
+              onChanged: onSearchChanged,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.containerPadding,
+              0,
+              AppSpacing.containerPadding,
+              AppSpacing.base,
+            ),
+            child: tabBar,
           ),
         ],
       ),
     );
   }
-
-  @override
-  bool shouldRebuild(covariant _PinnedTabBarDelegate oldDelegate) =>
-      oldDelegate.tabBar != tabBar;
 }
 
 class _EmptyState extends StatelessWidget {
@@ -346,12 +477,13 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.inbox_outlined,
-              size: 48, color: context.colors.secondary),
+          Icon(Icons.inbox_outlined, size: 48, color: context.colors.secondary),
           const SizedBox(height: AppSpacing.stackMd),
           Text(
             'No jobs found',
-            style: context.typography.titleSm.copyWith(color: context.colors.secondary),
+            style: context.typography.titleSm.copyWith(
+              color: context.colors.secondary,
+            ),
           ),
         ],
       ),
@@ -372,8 +504,11 @@ class _ErrorState extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.cloud_off_rounded,
-              size: 48, color: context.colors.secondary),
+          Icon(
+            Icons.cloud_off_rounded,
+            size: 48,
+            color: context.colors.secondary,
+          ),
           const SizedBox(height: AppSpacing.stackMd),
           Text(
             'Unable to load jobs',

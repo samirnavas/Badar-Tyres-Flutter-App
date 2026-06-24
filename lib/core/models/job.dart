@@ -244,7 +244,7 @@ class Job {
 
     final statusStr = json['status']?.toString() ?? 'pending';
 
-    final parsedSteps = _parseSteps(json, parsedServices);
+    final parsedSteps = _parseSteps(json, parsedServices, meta);
     final parsedHistory = _parseHistory(json);
     
     String rawJobNumber = json['idx']?.toString() ?? json['job_number']?.toString() ?? json['jobNumber']?.toString() ?? json['id']?.toString() ?? '';
@@ -399,7 +399,15 @@ class Job {
 List<JobStep> _parseSteps(
   Map<String, dynamic> json,
   List<JobService> services,
+  Map<String, dynamic>? meta,
 ) {
+  final metaChecklist = meta?['checklist'];
+  if (metaChecklist is List && metaChecklist.isNotEmpty) {
+    return metaChecklist
+        .map((e) => JobStep.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
   final raw = json['steps'];
   if (raw is List && raw.isNotEmpty) {
     return raw

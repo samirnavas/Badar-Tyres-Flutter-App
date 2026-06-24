@@ -33,7 +33,12 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
   @override
   void initState() {
     super.initState();
-    _items = [
+    _items = _defaultItems();
+    _loadExistingInspection();
+  }
+
+  List<InspectionItem> _defaultItems() {
+    return [
       'Front Tyres',
       'Rear Tyres',
       'Brake Pads',
@@ -50,6 +55,18 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
         .toList();
   }
 
+  String get _vehicleId =>
+      widget.job.vehicleId?.isNotEmpty == true
+          ? widget.job.vehicleId!
+          : (widget.job.vehicle?.id ?? '');
+
+  Future<void> _loadExistingInspection() async {
+    final existing =
+        await _repository.fetchInspectionForJob(widget.job.id);
+    if (!mounted || existing == null || existing.items.isEmpty) return;
+    setState(() => _items = existing.items);
+  }
+
   @override
   void dispose() {
     _notesDebounce?.cancel();
@@ -60,13 +77,20 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
     return InspectionReport(
       jobId: widget.job.id,
       technicianId: widget.job.technicianId ?? '',
-      vehicleId: widget.job.vehicleId ?? '',
+      vehicleId: _vehicleId,
       status: status,
       items: _items,
     );
   }
 
   void _autoSaveDraft() {
+    if (_vehicleId.isEmpty) {
+      if (kDebugMode) {
+        debugPrint('Inspection auto-save skipped: missing vehicle id');
+      }
+      return;
+    }
+
     final report = _buildReport(status: 'Draft');
     unawaited(
       _repository.saveInspectionReport(report.jobId, report).catchError((Object e) {
@@ -143,6 +167,16 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please check every inspection item before completing.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (_vehicleId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Vehicle information is missing for this job.'),
           backgroundColor: Colors.red,
         ),
       );

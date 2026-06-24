@@ -208,73 +208,85 @@ abstract final class AppTypography {
       GoogleFonts.hankenGrotesk(textStyle: style);
 
   /// display-lg — 32 / 700, tight tracking. Hero headings.
-  static TextStyle get displayLg => _base(const TextStyle(
-        fontSize: 32,
-        fontWeight: FontWeight.w700,
-        height: _lh40,
-        letterSpacing: -0.64, // -0.02em * 32
-        color: AppColors.onSurface,
-      ));
+  static TextStyle get displayLg => _base(
+    const TextStyle(
+      fontSize: 32,
+      fontWeight: FontWeight.w700,
+      height: _lh40,
+      letterSpacing: -0.64, // -0.02em * 32
+      color: AppColors.onSurface,
+    ),
+  );
 
   /// display-lg-mobile — 28 / 700.
-  static TextStyle get displayLgMobile => _base(const TextStyle(
-        fontSize: 28,
-        fontWeight: FontWeight.w700,
-        height: _lh36,
-        color: AppColors.onSurface,
-      ));
+  static TextStyle get displayLgMobile => _base(
+    const TextStyle(
+      fontSize: 28,
+      fontWeight: FontWeight.w700,
+      height: _lh36,
+      color: AppColors.onSurface,
+    ),
+  );
 
   /// headline-md — 24 / 600.
-  static TextStyle get headlineMd => _base(const TextStyle(
-        fontSize: 24,
-        fontWeight: FontWeight.w600,
-        height: _lh32,
-        color: AppColors.onSurface,
-      ));
+  static TextStyle get headlineMd => _base(
+    const TextStyle(
+      fontSize: 24,
+      fontWeight: FontWeight.w600,
+      height: _lh32,
+      color: AppColors.onSurface,
+    ),
+  );
 
   /// title-sm — 18 / 600.
-  static TextStyle get titleSm => _base(const TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight.w600,
-        height: _lh24t,
-        color: AppColors.onSurface,
-      ));
+  static TextStyle get titleSm => _base(
+    const TextStyle(
+      fontSize: 18,
+      fontWeight: FontWeight.w600,
+      height: _lh24t,
+      color: AppColors.onSurface,
+    ),
+  );
 
   /// body-md — 16 / 400, generous line height for readability.
-  static TextStyle get bodyMd => _base(const TextStyle(
-        fontSize: 16,
-        fontWeight: FontWeight.w400,
-        height: _lh24b,
-        color: AppColors.onSurface,
-      ));
+  static TextStyle get bodyMd => _base(
+    const TextStyle(
+      fontSize: 16,
+      fontWeight: FontWeight.w400,
+      height: _lh24b,
+      color: AppColors.onSurface,
+    ),
+  );
 
   /// label-sm — 12 / 500, wide tracking. Uppercase metadata / categories.
-  static TextStyle get labelSm => _base(const TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w500,
-        height: _lh16,
-        letterSpacing: 0.6, // 0.05em * 12
-        color: AppColors.onSurfaceVariant,
-      ));
+  static TextStyle get labelSm => _base(
+    const TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w500,
+      height: _lh16,
+      letterSpacing: 0.6, // 0.05em * 12
+      color: AppColors.onSurfaceVariant,
+    ),
+  );
 
   /// Maps the design tokens onto Flutter's [TextTheme] slots.
   static TextTheme get textTheme => TextTheme(
-        displayLarge: displayLg,
-        displayMedium: displayLg,
-        displaySmall: headlineMd,
-        headlineLarge: headlineMd,
-        headlineMedium: headlineMd,
-        headlineSmall: titleSm,
-        titleLarge: titleSm,
-        titleMedium: titleSm,
-        titleSmall: titleSm.copyWith(fontSize: 16),
-        bodyLarge: bodyMd,
-        bodyMedium: bodyMd,
-        bodySmall: bodyMd.copyWith(fontSize: 14, height: 20 / 14),
-        labelLarge: labelSm.copyWith(fontSize: 14, color: AppColors.onSurface),
-        labelMedium: labelSm,
-        labelSmall: labelSm,
-      );
+    displayLarge: displayLg,
+    displayMedium: displayLg,
+    displaySmall: headlineMd,
+    headlineLarge: headlineMd,
+    headlineMedium: headlineMd,
+    headlineSmall: titleSm,
+    titleLarge: titleSm,
+    titleMedium: titleSm,
+    titleSmall: titleSm.copyWith(fontSize: 16),
+    bodyLarge: bodyMd,
+    bodyMedium: bodyMd,
+    bodySmall: bodyMd.copyWith(fontSize: 14, height: 20 / 14),
+    labelLarge: labelSm.copyWith(fontSize: 14, color: AppColors.onSurface),
+    labelMedium: labelSm,
+    labelSmall: labelSm,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -334,28 +346,26 @@ ColorScheme _seededColorScheme(Brightness brightness) {
 }
 
 CardThemeData _cardTheme(ColorScheme cs) => CardThemeData(
-      color: cs.surfaceContainerHigh,
-      surfaceTintColor: Colors.transparent,
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-        borderRadius: AppRadius.brLg,
-        side: BorderSide(color: cs.outlineVariant, width: 1),
-      ),
-      clipBehavior: Clip.antiAlias,
-    );
+  color: cs.surfaceContainerHigh,
+  surfaceTintColor: Colors.transparent,
+  elevation: 0,
+  margin: EdgeInsets.zero,
+  shape: RoundedRectangleBorder(
+    borderRadius: AppRadius.brLg,
+    side: BorderSide(color: cs.outlineVariant, width: 1),
+  ),
+  clipBehavior: Clip.antiAlias,
+);
 
 InputDecorationTheme _inputDecorationTheme(ColorScheme cs) =>
     InputDecorationTheme(
       filled: true,
       fillColor: cs.surfaceContainerHigh,
       isDense: false,
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       hintStyle: AppTypography.bodyMd.copyWith(color: cs.onSurfaceVariant),
       labelStyle: AppTypography.bodyMd.copyWith(color: cs.onSurfaceVariant),
-      floatingLabelStyle:
-          AppTypography.labelSm.copyWith(color: cs.primary),
+      floatingLabelStyle: AppTypography.labelSm.copyWith(color: cs.primary),
       prefixIconColor: cs.onSurfaceVariant,
       suffixIconColor: cs.onSurfaceVariant,
       iconColor: cs.onSurfaceVariant,
@@ -531,8 +541,9 @@ abstract final class AppTheme {
         disabledColor: AppColors.surfaceContainer,
         selectedColor: AppColors.primaryContainer,
         labelStyle: AppTypography.labelSm.copyWith(color: AppColors.onSurface),
-        secondaryLabelStyle:
-            AppTypography.labelSm.copyWith(color: AppColors.onPrimaryContainer),
+        secondaryLabelStyle: AppTypography.labelSm.copyWith(
+          color: AppColors.onPrimaryContainer,
+        ),
         side: const BorderSide(color: AppColors.outlineVariant, width: 1),
         shape: const RoundedRectangleBorder(borderRadius: AppRadius.brFull),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -552,13 +563,16 @@ abstract final class AppTheme {
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppRadius.xl),
+          ),
         ),
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: AppColors.surfaceBright,
-        contentTextStyle:
-            AppTypography.bodyMd.copyWith(color: AppColors.onSurface),
+        contentTextStyle: AppTypography.bodyMd.copyWith(
+          color: AppColors.onSurface,
+        ),
         actionTextColor: AppColors.primary,
         behavior: SnackBarBehavior.floating,
         shape: const RoundedRectangleBorder(borderRadius: AppRadius.brBase),
@@ -572,29 +586,33 @@ abstract final class AppTheme {
 
       // Selection controls accented in primary red.
       switchTheme: SwitchThemeData(
-        thumbColor: WidgetStateProperty.resolveWith((states) =>
-            states.contains(WidgetState.selected)
-                ? AppColors.primary
-                : AppColors.onSurfaceVariant),
-        trackColor: WidgetStateProperty.resolveWith((states) =>
-            states.contains(WidgetState.selected)
-                ? AppColors.primaryContainer
-                : AppColors.surfaceBright),
+        thumbColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? AppColors.primary
+              : AppColors.onSurfaceVariant,
+        ),
+        trackColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? AppColors.primaryContainer
+              : AppColors.surfaceBright,
+        ),
       ),
       checkboxTheme: CheckboxThemeData(
-        fillColor: WidgetStateProperty.resolveWith((states) =>
-            states.contains(WidgetState.selected)
-                ? AppColors.primary
-                : Colors.transparent),
+        fillColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? AppColors.primary
+              : Colors.transparent,
+        ),
         checkColor: const WidgetStatePropertyAll(AppColors.onPrimary),
         side: const BorderSide(color: AppColors.outline, width: 1.5),
         shape: const RoundedRectangleBorder(borderRadius: AppRadius.brSm),
       ),
       radioTheme: RadioThemeData(
-        fillColor: WidgetStateProperty.resolveWith((states) =>
-            states.contains(WidgetState.selected)
-                ? AppColors.primary
-                : AppColors.outline),
+        fillColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? AppColors.primary
+              : AppColors.outline,
+        ),
       ),
       progressIndicatorTheme: const ProgressIndicatorThemeData(
         color: AppColors.primary,
@@ -695,8 +713,12 @@ abstract final class AppTheme {
         backgroundColor: AppLightColors.surfaceContainer,
         disabledColor: AppLightColors.surfaceContainerLowest,
         selectedColor: AppLightColors.primary,
-        labelStyle: AppTypography.labelSm.copyWith(color: AppLightColors.onSurface),
-        secondaryLabelStyle: AppTypography.labelSm.copyWith(color: AppLightColors.onPrimary),
+        labelStyle: AppTypography.labelSm.copyWith(
+          color: AppLightColors.onSurface,
+        ),
+        secondaryLabelStyle: AppTypography.labelSm.copyWith(
+          color: AppLightColors.onPrimary,
+        ),
         side: const BorderSide(color: AppLightColors.outlineVariant, width: 1),
         shape: const RoundedRectangleBorder(borderRadius: AppRadius.brFull),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -708,22 +730,33 @@ abstract final class AppTheme {
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: AppRadius.brLg,
-          side: const BorderSide(color: AppLightColors.outlineVariant, width: 1),
+          side: const BorderSide(
+            color: AppLightColors.outlineVariant,
+            width: 1,
+          ),
         ),
-        titleTextStyle: AppTypography.headlineMd.copyWith(color: AppLightColors.onSurface),
-        contentTextStyle: AppTypography.bodyMd.copyWith(color: AppLightColors.onSurface),
+        titleTextStyle: AppTypography.headlineMd.copyWith(
+          color: AppLightColors.onSurface,
+        ),
+        contentTextStyle: AppTypography.bodyMd.copyWith(
+          color: AppLightColors.onSurface,
+        ),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: AppLightColors.surfaceContainerLowest,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppRadius.xl),
+          ),
         ),
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: AppLightColors.surfaceContainerHighest,
-        contentTextStyle: AppTypography.bodyMd.copyWith(color: AppLightColors.onSurface),
+        contentTextStyle: AppTypography.bodyMd.copyWith(
+          color: AppLightColors.onSurface,
+        ),
         actionTextColor: AppLightColors.primary,
         behavior: SnackBarBehavior.floating,
         shape: const RoundedRectangleBorder(borderRadius: AppRadius.brBase),
@@ -736,29 +769,33 @@ abstract final class AppTheme {
       ),
 
       switchTheme: SwitchThemeData(
-        thumbColor: WidgetStateProperty.resolveWith((states) =>
-            states.contains(WidgetState.selected)
-                ? AppLightColors.primary
-                : AppLightColors.onSurfaceVariant),
-        trackColor: WidgetStateProperty.resolveWith((states) =>
-            states.contains(WidgetState.selected)
-                ? AppLightColors.primaryContainer.withValues(alpha: 0.3)
-                : AppLightColors.surfaceVariant),
+        thumbColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? AppLightColors.primary
+              : AppLightColors.onSurfaceVariant,
+        ),
+        trackColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? AppLightColors.primaryContainer.withValues(alpha: 0.3)
+              : AppLightColors.surfaceVariant,
+        ),
       ),
       checkboxTheme: CheckboxThemeData(
-        fillColor: WidgetStateProperty.resolveWith((states) =>
-            states.contains(WidgetState.selected)
-                ? AppLightColors.primary
-                : Colors.transparent),
+        fillColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? AppLightColors.primary
+              : Colors.transparent,
+        ),
         checkColor: const WidgetStatePropertyAll(AppLightColors.onPrimary),
         side: const BorderSide(color: AppLightColors.outline, width: 1.5),
         shape: const RoundedRectangleBorder(borderRadius: AppRadius.brSm),
       ),
       radioTheme: RadioThemeData(
-        fillColor: WidgetStateProperty.resolveWith((states) =>
-            states.contains(WidgetState.selected)
-                ? AppLightColors.primary
-                : AppLightColors.outline),
+        fillColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? AppLightColors.primary
+              : AppLightColors.outline,
+        ),
       ),
       progressIndicatorTheme: const ProgressIndicatorThemeData(
         color: AppLightColors.primary,
@@ -770,7 +807,9 @@ abstract final class AppTheme {
           color: AppLightColors.surfaceContainerHighest,
           borderRadius: AppRadius.brBase,
         ),
-        textStyle: AppTypography.labelSm.copyWith(color: AppLightColors.onSurface),
+        textStyle: AppTypography.labelSm.copyWith(
+          color: AppLightColors.onSurface,
+        ),
       ),
       visualDensity: VisualDensity.adaptivePlatformDensity,
     );
@@ -781,12 +820,18 @@ class AppTypographyData {
   final BuildContext context;
   AppTypographyData(this.context);
 
-  TextStyle get displayLg => AppTypography.displayLg.copyWith(color: context.colors.onSurface);
-  TextStyle get displayLgMobile => AppTypography.displayLgMobile.copyWith(color: context.colors.onSurface);
-  TextStyle get headlineMd => AppTypography.headlineMd.copyWith(color: context.colors.onSurface);
-  TextStyle get titleSm => AppTypography.titleSm.copyWith(color: context.colors.onSurface);
-  TextStyle get bodyMd => AppTypography.bodyMd.copyWith(color: context.colors.onSurface);
-  TextStyle get labelSm => AppTypography.labelSm.copyWith(color: context.colors.onSurfaceVariant);
+  TextStyle get displayLg =>
+      AppTypography.displayLg.copyWith(color: context.colors.onSurface);
+  TextStyle get displayLgMobile =>
+      AppTypography.displayLgMobile.copyWith(color: context.colors.onSurface);
+  TextStyle get headlineMd =>
+      AppTypography.headlineMd.copyWith(color: context.colors.onSurface);
+  TextStyle get titleSm =>
+      AppTypography.titleSm.copyWith(color: context.colors.onSurface);
+  TextStyle get bodyMd =>
+      AppTypography.bodyMd.copyWith(color: context.colors.onSurface);
+  TextStyle get labelSm =>
+      AppTypography.labelSm.copyWith(color: context.colors.onSurfaceVariant);
 }
 
 extension ThemeExt on BuildContext {

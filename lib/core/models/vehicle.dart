@@ -1,5 +1,6 @@
 class Vehicle {
   const Vehicle({
+    this.id,
     required this.vehicleNumber,
     required this.vehicleModel,
     required this.vehicleType,
@@ -9,6 +10,7 @@ class Vehicle {
     required this.lastJobId,
   });
 
+  final String? id;
   final String vehicleNumber;
   final String vehicleModel;
   final String vehicleType;
@@ -28,6 +30,7 @@ class Vehicle {
         : null;
 
     return Vehicle(
+      id: json['id'] as String?,
       vehicleNumber: json['plate_number'] as String? ??
           json['registration_number'] as String? ??
           json['vehicleNumber'] as String? ??

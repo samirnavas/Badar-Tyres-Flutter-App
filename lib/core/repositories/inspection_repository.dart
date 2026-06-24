@@ -13,11 +13,32 @@ class InspectionRepository {
     return id;
   }
 
-  /// Persists a completed DVI checklist to Supabase.
+  /// Loads the latest inspection draft/submission for a job.
+  Future<InspectionReport?> fetchInspectionForJob(String jobId) async {
+    try {
+      final data = await _supabase.rpc(
+        'get_job_inspection',
+        params: {
+          'p_job_id': jobId,
+          'p_technician_id': _userId,
+        },
+      );
+
+      if (data == null) return null;
+      final map = Map<String, dynamic>.from(data as Map);
+      return InspectionReport.fromSupabaseRow(map);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('fetchInspectionForJob failed: $e');
+      }
+      return null;
+    }
+  }
+
+  /// Persists a DVI checklist via SECURITY DEFINER RPC (bypasses RLS safely).
   Future<void> saveInspectionReport(String jobId, InspectionReport report) async {
-    final technicianId = report.technicianId.isNotEmpty
-        ? report.technicianId
-        : _userId;
+    final technicianId =
+        report.technicianId.isNotEmpty ? report.technicianId : _userId;
     final vehicleId = report.vehicleId;
 
     if (vehicleId.isEmpty) {
@@ -25,30 +46,21 @@ class InspectionRepository {
     }
 
     try {
-      final row = {
-        ...report.toSupabaseRow(),
-        'job_id': jobId,
-        'technician_id': technicianId,
-        'vehicle_id': vehicleId,
-      };
-
-      final existing = await _supabase
-          .from('inspections')
-          .select('id')
-          .eq('job_id', jobId)
-          .order('created_at', ascending: false)
-          .maybeSingle();
-
-      if (existing != null) {
-        await _supabase.from('inspections').update(row).eq('id', existing['id']);
-      } else {
-        await _supabase.from('inspections').insert(row);
-      }
+      await _supabase.rpc(
+        'upsert_job_inspection',
+        params: {
+          'p_job_id': jobId,
+          'p_technician_id': technicianId,
+          'p_vehicle_id': vehicleId,
+          'p_status': report.status,
+          'p_items': report.items.map((e) => e.toJson()).toList(),
+        },
+      );
 
       if (kDebugMode) {
-        debugPrint('--- SAVED INSPECTION REPORT (Supabase) ---');
+        debugPrint('--- SAVED INSPECTION REPORT (RPC) ---');
         debugPrint('jobId: $jobId, items: ${report.items.length}');
-        debugPrint('------------------------------------------');
+        debugPrint('-------------------------------------');
       }
     } catch (e) {
       throw Exception('Failed to save inspection report: $e');
