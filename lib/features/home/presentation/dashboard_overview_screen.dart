@@ -1,7 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../../core/auth/session_store.dart';
-
-import 'technician_workspace_screen.dart';
 
 class DashboardOverviewScreen extends StatelessWidget {
   const DashboardOverviewScreen({
@@ -15,10 +12,6 @@ class DashboardOverviewScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (SessionStore.currentUser?.role == 'Technician') {
-      return const TechnicianWorkspaceScreen();
-    }
-    
     // Existing admin dashboard logic would go here.
     // Currently rendering a placeholder as the previous implementation was overwritten.
     return Scaffold(

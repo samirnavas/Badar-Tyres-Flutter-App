@@ -4,9 +4,9 @@ import '../../../core/auth/session_store.dart';
 import '../../../core/models/job.dart';
 import '../../../core/repositories/job_repository.dart';
 import '../../../core/theme/theme.dart';
+import '../../../core/widgets/job_list_tile.dart';
+import '../../../core/widgets/metric_card.dart';
 import '../../job_card/presentation/job_card_preview_screen.dart';
-import 'widgets/active_job_card.dart';
-import 'widgets/pending_job_tile.dart';
 
 class TechnicianWorkspaceScreen extends StatefulWidget {
   const TechnicianWorkspaceScreen({super.key});
@@ -91,32 +91,31 @@ class _TechnicianWorkspaceScreenState extends State<TechnicianWorkspaceScreen> {
     return jobs.where((job) => job.technicianId == currentUserId).toList();
   }
 
-  Job? _activeJob(List<Job> jobs) {
-    for (final job in jobs) {
-      if (job.status == JobStatus.inProgress) return job;
-    }
-    return null;
-  }
+  List<Job> _sortJobs(List<Job> jobs) {
+    final sorted = List<Job>.from(jobs);
+    sorted.sort((a, b) {
+      // In progress first
+      if (a.status == JobStatus.inProgress && b.status != JobStatus.inProgress) return -1;
+      if (a.status != JobStatus.inProgress && b.status == JobStatus.inProgress) return 1;
+      
+      // Then pending
+      if (a.status == JobStatus.pending && b.status != JobStatus.pending) return -1;
+      if (a.status != JobStatus.pending && b.status == JobStatus.pending) return 1;
 
-  List<Job> _pendingJobs(List<Job> jobs) {
-    final pending =
-        jobs.where((job) => job.status == JobStatus.pending).toList();
-    pending.sort(_compareUrgency);
-    return pending;
-  }
+      // Then urgency
+      final endCompare = _expectedEndSortKey(a.expectedEnd)
+          .compareTo(_expectedEndSortKey(b.expectedEnd));
+      if (endCompare != 0) return endCompare;
 
-  int _compareUrgency(Job a, Job b) {
-    final endCompare = _expectedEndSortKey(a.expectedEnd)
-        .compareTo(_expectedEndSortKey(b.expectedEnd));
-    if (endCompare != 0) return endCompare;
+      final delayCompare =
+          _delaySortKey(a.delay).compareTo(_delaySortKey(b.delay));
+      if (delayCompare != 0) return delayCompare;
 
-    final delayCompare =
-        _delaySortKey(a.delay).compareTo(_delaySortKey(b.delay));
-    if (delayCompare != 0) return delayCompare;
-
-    final aCreated = a.createdAt?.millisecondsSinceEpoch ?? 0;
-    final bCreated = b.createdAt?.millisecondsSinceEpoch ?? 0;
-    return aCreated.compareTo(bCreated);
+      final aCreated = a.createdAt?.millisecondsSinceEpoch ?? 0;
+      final bCreated = b.createdAt?.millisecondsSinceEpoch ?? 0;
+      return aCreated.compareTo(bCreated);
+    });
+    return sorted;
   }
 
   int _expectedEndSortKey(String value) {
@@ -137,16 +136,10 @@ class _TechnicianWorkspaceScreenState extends State<TechnicianWorkspaceScreen> {
     return int.tryParse(digits?.group(0) ?? '0') ?? 0;
   }
 
-  String _bayHeading(Job? activeJob, List<Job> pendingJobs) {
-    final bay = activeJob?.bayName?.trim();
-    if (bay != null && bay.isNotEmpty) return bay;
-
-    for (final job in pendingJobs) {
-      final pendingBay = job.bayName?.trim();
-      if (pendingBay != null && pendingBay.isNotEmpty) return pendingBay;
-    }
-
-    return 'Unassigned';
+  bool _isDelayed(Job job) {
+    if (job.status == JobStatus.onHold) return true;
+    final delay = _delaySortKey(job.delay);
+    return delay > 0;
   }
 
   void _openJob(Job job) {
@@ -203,83 +196,106 @@ class _TechnicianWorkspaceScreenState extends State<TechnicianWorkspaceScreen> {
     }
 
     final myJobs = _myJobs(_jobs!);
-    final activeJob = _activeJob(myJobs);
-    final pendingJobs = _pendingJobs(myJobs);
-    final bayHeading = _bayHeading(activeJob, pendingJobs);
+    final sortedJobs = _sortJobs(myJobs);
+
+    final totalCount = myJobs.length;
+    final runningCount = myJobs.where((j) => j.status == JobStatus.inProgress).length;
+    final completedCount = myJobs.where((j) => j.status == JobStatus.completed).length;
+    final delayedCount = myJobs.where((j) => _isDelayed(j)).length;
 
     return RefreshIndicator(
       color: context.colors.primary,
       onRefresh: _loadJobs,
-      child: myJobs.isEmpty
-          ? LayoutBuilder(
-              builder: (context, constraints) => ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.all(AppSpacing.containerPadding),
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
-                    height: constraints.maxHeight,
-                    child: _buildEmptyState(),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: MetricCard.totalJobs(
+                          value: totalCount.toString(),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.gutter),
+                      Expanded(
+                        child: MetricCard.running(
+                          value: runningCount.toString(),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.gutter),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: MetricCard.completed(
+                          value: completedCount.toString(),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.gutter),
+                      Expanded(
+                        child: MetricCard.delayed(
+                          value: delayedCount.toString(),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
+            ),
+          ),
+          if (sortedJobs.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: _buildEmptyState(context),
             )
-          : ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.containerPadding,
-                AppSpacing.stackMd,
-                AppSpacing.containerPadding,
-                AppSpacing.stackLg,
-              ),
-              children: [
-                if (activeJob != null) ...[
-                  ActiveJobCard(
-                    job: activeJob,
-                    onPause: () =>
-                        _handleStatusChange(activeJob, JobStatus.onHold),
-                    onComplete: () =>
-                        _handleStatusChange(activeJob, JobStatus.completed),
-                    onOpenDetails: () => _openJob(activeJob),
-                  ),
-                  const SizedBox(height: AppSpacing.stackLg),
-                ] else ...[
-                  _NoActiveJobBanner(),
-                  const SizedBox(height: AppSpacing.stackLg),
-                ],
-                Text(
-                  'Up Next ($bayHeading)',
-                  style: context.typography.titleSm.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.gutter),
-                if (pendingJobs.isEmpty)
-                  _NoPendingJobsMessage(hasActiveJob: activeJob != null)
-                else
-                  ...pendingJobs.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final job = entry.value;
+          else
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.containerPadding,
+              ).copyWith(bottom: AppSpacing.stackLg),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final job = sortedJobs[index];
                     return Padding(
                       padding: const EdgeInsets.only(bottom: AppSpacing.gutter),
-                      child: PendingJobTile(
+                      child: JobListTile(
                         key: ValueKey(job.id),
-                        job: job,
-                        position: index + 1,
+                        jobNumber: job.jobNumber,
+                        customerName: job.customerName,
+                        vehicleModel: job.vehicleModel,
+                        vehicleNumber: job.vehicleNumber,
+                        status: job.status,
+                        time: job.time,
+                        date: job.date,
+                        technician: job.technician,
+                        startTime: job.startTime,
+                        expectedEnd: job.expectedEnd,
+                        actualEnd: job.actualEnd,
+                        delay: job.delay,
                         onTap: () => _openJob(job),
-                        onStart: activeJob == null
-                            ? () => _handleStatusChange(
-                                  job,
-                                  JobStatus.inProgress,
-                                )
-                            : null,
+                        onStatusChange: (status) =>
+                            _handleStatusChange(job, status),
                       ),
                     );
-                  }),
-              ],
+                  },
+                  childCount: sortedJobs.length,
+                ),
+              ),
             ),
+        ],
+      ),
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(BuildContext context) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -303,53 +319,3 @@ class _TechnicianWorkspaceScreenState extends State<TechnicianWorkspaceScreen> {
   }
 }
 
-class _NoActiveJobBanner extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.stackMd),
-      decoration: BoxDecoration(
-        color: context.colors.surfaceContainerLow,
-        borderRadius: AppRadius.brLg,
-        border: Border.all(color: context.colors.outlineVariant),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.play_circle_outline,
-              color: context.colors.onSurfaceVariant),
-          const SizedBox(width: AppSpacing.gutter),
-          Expanded(
-            child: Text(
-              'No job in progress. Start the next pending job below.',
-              style: context.typography.bodyMd.copyWith(
-                color: context.colors.onSurfaceVariant,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _NoPendingJobsMessage extends StatelessWidget {
-  const _NoPendingJobsMessage({required this.hasActiveJob});
-
-  final bool hasActiveJob;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.stackMd),
-      child: Text(
-        hasActiveJob
-            ? 'No pending jobs in your queue.'
-            : 'No pending jobs waiting in your bay.',
-        style: context.typography.bodyMd.copyWith(
-          color: context.colors.onSurfaceVariant,
-        ),
-      ),
-    );
-  }
-}

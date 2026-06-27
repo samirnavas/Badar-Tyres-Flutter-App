@@ -134,12 +134,12 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
         imageQuality: 50,
       );
       if (image != null) {
-        final updatedUrls = List<String>.from(_items[index].photoUrls)
+        final updatedUrls = List<String>.from(_items[index].evidencePhotos)
           ..add(image.path);
         _applyItemUpdate(
           index,
           _items[index].copyWith(
-            photoUrls: updatedUrls,
+            evidencePhotos: updatedUrls,
             isChecked: true,
           ),
         );
@@ -154,11 +154,11 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
   }
 
   void _removeImage(int itemIndex, int photoIndex) {
-    final updatedUrls = List<String>.from(_items[itemIndex].photoUrls)
+    final updatedUrls = List<String>.from(_items[itemIndex].evidencePhotos)
       ..removeAt(photoIndex);
     _applyItemUpdate(
       itemIndex,
-      _items[itemIndex].copyWith(photoUrls: updatedUrls),
+      _items[itemIndex].copyWith(evidencePhotos: updatedUrls),
     );
   }
 
@@ -350,13 +350,13 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
                     ),
                   ],
                 ),
-                if (item.photoUrls.isNotEmpty) ...[
+                if (item.evidencePhotos.isNotEmpty) ...[
                   const SizedBox(height: AppSpacing.stackSm),
                   SizedBox(
                     height: 80,
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
-                      itemCount: item.photoUrls.length,
+                      itemCount: item.evidencePhotos.length,
                       itemBuilder: (context, photoIndex) {
                         return Container(
                           width: 80,
@@ -374,7 +374,7 @@ class _DviChecklistScreenState extends State<DviChecklistScreen> {
                               ClipRRect(
                                 borderRadius: AppRadius.brBase,
                                 child: Image.file(
-                                  File(item.photoUrls[photoIndex]),
+                                  File(item.evidencePhotos[photoIndex]),
                                   fit: BoxFit.cover,
                                 ),
                               ),

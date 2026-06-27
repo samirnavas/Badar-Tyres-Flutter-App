@@ -4,7 +4,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/models/job.dart';
 import '../../../core/repositories/job_repository.dart';
 import '../../../core/theme/theme.dart';
+import '../../../core/widgets/custom_text_field.dart';
 import '../../inspections/presentation/dvi_checklist_screen.dart';
+import 'job_status_controller.dart';
 
 class JobExecutionScreen extends StatefulWidget {
   const JobExecutionScreen({super.key, required this.job});
@@ -17,8 +19,7 @@ class JobExecutionScreen extends StatefulWidget {
 
 class _JobExecutionScreenState extends State<JobExecutionScreen> {
   final JobRepository _repository = JobRepository();
-  late Job _job;
-  bool _isLoading = false;
+  late JobStatusController _controller;
 
   static const _pauseReasons = [
     'Waiting for parts',
@@ -30,34 +31,27 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
   @override
   void initState() {
     super.initState();
-    _job = widget.job;
+    _controller = JobStatusController(initialJob: widget.job, repository: _repository);
   }
 
   @override
   void dispose() {
+    _controller.dispose();
     _repository.dispose();
     super.dispose();
   }
 
-  Future<void> _handleStart() async {
-    if (_isLoading) return;
-
-    setState(() => _isLoading = true);
-    try {
-      await _repository.updateJobStatus(_job.id, JobStatus.inProgress);
-      if (!mounted) return;
-      setState(() => _job = _job.copyWith(status: JobStatus.inProgress));
-      _showSuccess('Job started successfully.');
-    } catch (_) {
-      if (!mounted) return;
-      _showDbError();
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
+  void _showDbError() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Failed to update database. Please check connection.'),
+        backgroundColor: Colors.red,
+      ),
+    );
   }
 
   Future<void> _handlePause() async {
-    if (_isLoading) return;
+    if (_controller.isLoading) return;
 
     final reason = await showDialog<String>(
       context: context,
@@ -86,155 +80,149 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
 
     if (reason == null) return;
 
-    setState(() => _isLoading = true);
     try {
-      await _repository.updateJobStatus(
-        _job.id,
-        JobStatus.onHold,
-        pauseReason: reason,
-      );
-      if (!mounted) return;
-      setState(() => _job = _job.copyWith(status: JobStatus.onHold));
-      _showSuccess('Job paused successfully.');
+      await _controller.pauseJob(reason);
     } catch (_) {
       if (!mounted) return;
       _showDbError();
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _handleComplete() async {
-    if (_isLoading) return;
+  Future<void> _showAddEstimateDialog() async {
+    final titleController = TextEditingController();
+    final amountController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
 
-    setState(() => _isLoading = true);
-    try {
-      await _repository.updateJobStatus(_job.id, JobStatus.completed);
-      if (!mounted) return;
-      setState(() => _job = _job.copyWith(status: JobStatus.completed));
-      _showSuccess('Job marked as complete.');
-    } catch (_) {
-      if (!mounted) return;
-      _showDbError();
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _handleStepToggle(JobStep step, bool? isCompleted) async {
-    if (isCompleted == null || isCompleted == step.isCompleted || _isLoading) {
-      return;
-    }
-
-    final previousSteps = _job.steps;
-    final completedAt = isCompleted ? DateTime.now() : null;
-    final updatedSteps = _job.steps
-        .map(
-          (item) => item.id == step.id
-              ? item.copyWith(
-                  isCompleted: isCompleted,
-                  completedAt: completedAt,
-                  clearCompletedAt: !isCompleted,
-                )
-              : item,
-        )
-        .toList();
-
-    setState(() {
-      _isLoading = true;
-      _job = _job.copyWith(steps: updatedSteps);
-    });
-
-    try {
-      await _repository.toggleJobStep(_job.id, step.id, isCompleted);
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _job = _job.copyWith(steps: previousSteps));
-      _showDbError();
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  void _showDbError() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Failed to update database. Please check connection.'),
-        backgroundColor: Colors.red,
-      ),
-    );
-  }
-
-  void _showSuccess(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: AppStatusColors.completed,
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: context.colors.surface,
+        title: Text('Add to Estimate', style: context.typography.titleSm),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CustomTextField(
+                controller: titleController,
+                hint: 'Service / Part name',
+                validator: (val) => val == null || val.isEmpty ? 'Required' : null,
+              ),
+              const SizedBox(height: 16),
+              CustomTextField(
+                controller: amountController,
+                hint: 'Amount (e.g. 50.00)',
+                keyboardType: TextInputType.number,
+                validator: (val) {
+                  if (val == null || val.isEmpty) return 'Required';
+                  if (double.tryParse(val) == null) return 'Invalid number';
+                  return null;
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('Cancel', style: TextStyle(color: context.colors.onSurfaceVariant)),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (formKey.currentState?.validate() == true) {
+                final service = JobService(
+                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                  name: titleController.text,
+                  description: 'Added by technician',
+                  amount: double.parse(amountController.text),
+                );
+                _controller.addEstimate(service);
+                Navigator.of(context).pop();
+              }
+            },
+            child: const Text('Add'),
+          ),
+        ],
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: context.colors.surface,
-      appBar: AppBar(
-        backgroundColor: context.colors.surface,
-        foregroundColor: context.colors.onSurface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Text(
-          'Job ${_job.jobNumber}',
-          style: context.typography.titleSm.copyWith(
-            color: context.colors.onSurface,
-          ),
-        ),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.containerPadding,
-          AppSpacing.stackMd,
-          AppSpacing.containerPadding,
-          AppSpacing.stackLg,
-        ),
-        children: [
-          _VehicleHeader(job: _job),
-          const SizedBox(height: AppSpacing.stackMd),
-          _ActionSection(
-            job: _job,
-            isLoading: _isLoading,
-            onStart: _handleStart,
-            onPause: _handlePause,
-            onComplete: _handleComplete,
-          ),
-          if (_job.status == JobStatus.inProgress) ...[
-            const SizedBox(height: AppSpacing.stackMd),
-            _InspectionButton(job: _job),
-          ],
-          const SizedBox(height: AppSpacing.stackMd),
-          Text(
-            'Checklist',
-            style: context.typography.titleSm.copyWith(
-              fontSize: 18,
-              color: context.colors.onSurface,
+    return ListenableBuilder(
+      listenable: _controller,
+      builder: (context, _) {
+        final job = _controller.job;
+        final isLoading = _controller.isLoading;
+
+        return Scaffold(
+          backgroundColor: context.colors.surface,
+          appBar: AppBar(
+            backgroundColor: context.colors.surface,
+            foregroundColor: context.colors.onSurface,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            title: Text(
+              'Job ',
+              style: context.typography.titleSm.copyWith(
+                color: context.colors.onSurface,
+              ),
             ),
           ),
-          const SizedBox(height: AppSpacing.gutter),
-          _StepsChecklist(
-            steps: _job.steps,
-            isLoading: _isLoading,
-            onStepToggle: _handleStepToggle,
+          body: ListView(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.containerPadding,
+              AppSpacing.stackMd,
+              AppSpacing.containerPadding,
+              AppSpacing.stackLg,
+            ),
+            children: [
+              _VehicleHeader(job: job),
+              const SizedBox(height: AppSpacing.stackMd),
+              _ActionSection(
+                job: job,
+                isLoading: isLoading,
+                onStart: () => _controller.startJob(),
+                onPause: _handlePause,
+                onComplete: () => _controller.completeJob(),
+              ),
+              if (job.status == JobStatus.inProgress) ...[
+                const SizedBox(height: AppSpacing.stackMd),
+                _InspectionButton(job: job),
+              ],
+              const SizedBox(height: AppSpacing.stackMd),
+              Text(
+                'Checklist',
+                style: context.typography.titleSm.copyWith(
+                  fontSize: 18,
+                  color: context.colors.onSurface,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.gutter),
+              _StepsChecklist(
+                steps: job.steps,
+                isLoading: isLoading,
+                onStepToggle: (step, val) => _controller.toggleStep(step, val ?? false),
+              ),
+              const SizedBox(height: AppSpacing.stackLg),
+              _EstimatesSection(job: job, onAddEstimate: _showAddEstimateDialog),
+              const SizedBox(height: AppSpacing.stackLg),
+              _TechnicianNotesSection(
+                initialNotes: job.technicianNotes,
+                onNotesChanged: _controller.updateNotes,
+              ),
+              if (job.history.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.stackLg),
+                _HistorySection(history: job.history),
+              ],
+            ],
           ),
-          if (_job.history.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.stackMd),
-            _HistorySection(history: _job.history),
-          ],
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -393,111 +381,95 @@ class _ActionSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (job.status == JobStatus.pending || job.status == JobStatus.onHold) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SizedBox(
-            height: 52,
-            child: FilledButton(
-              onPressed: isLoading ? null : onStart,
-              child: isLoading
-                  ? SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        color: context.colors.onPrimary,
-                      ),
-                    )
-                  : Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.play_arrow_rounded, size: 24),
-                        const SizedBox(width: 8),
-                        Text(
-                          job.status == JobStatus.pending
-                              ? 'START JOB'
-                              : 'RESUME JOB',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ],
-                    ),
-            ),
+    return Row(
+      children: [
+        Expanded(
+          child: _ActionButton(
+            label: 'Start Job',
+            icon: Icons.play_arrow_rounded,
+            color: AppStatusColors.running,
+            isEnabled: !isLoading && (job.status == JobStatus.pending || job.status == JobStatus.onHold),
+            onTap: onStart,
           ),
-        ],
-      );
-    }
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _ActionButton(
+            label: 'Pause Job',
+            icon: Icons.pause_rounded,
+            color: AppStatusColors.pending,
+            isEnabled: !isLoading && job.status == JobStatus.inProgress,
+            onTap: onPause,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _ActionButton(
+            label: 'Complete',
+            icon: Icons.check_rounded,
+            color: AppStatusColors.completed,
+            isEnabled: !isLoading && job.status == JobStatus.inProgress,
+            onTap: onComplete,
+          ),
+        ),
+      ],
+    );
+  }
+}
 
-    if (job.status == JobStatus.inProgress) {
-      return Row(
-        children: [
-          Expanded(
-            child: SizedBox(
-              height: 52,
-              child: OutlinedButton.icon(
-                icon: const Icon(Icons.pause_rounded, size: 22),
-                label: const Text(
-                  'PAUSE',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: context.colors.onSurface,
-                  side: BorderSide(color: context.colors.outline),
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: AppRadius.brLg,
-                  ),
-                ),
-                onPressed: isLoading ? null : onPause,
-              ),
-            ),
-          ),
-          const SizedBox(width: AppSpacing.gutter),
-          Expanded(
-            flex: 2,
-            child: SizedBox(
-              height: 52,
-              child: FilledButton(
-                onPressed: isLoading ? null : onComplete,
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppStatusColors.running,
-                  foregroundColor: context.colors.onPrimary,
-                  elevation: 0,
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: AppRadius.brLg,
-                  ),
-                ),
-                child: isLoading
-                    ? SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          color: context.colors.onPrimary,
-                        ),
-                      )
-                    : const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.check_rounded, size: 22),
-                          SizedBox(width: 8),
-                          Text(
-                            'COMPLETE',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                        ],
-                      ),
-              ),
-            ),
-          ),
-        ],
-      );
-    }
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.isEnabled,
+    required this.onTap,
+  });
 
-    return const SizedBox.shrink();
+  final String label;
+  final IconData icon;
+  final Color color;
+  final bool isEnabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: isEnabled ? 1.0 : 0.5,
+      child: Material(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: AppRadius.brBase,
+        child: InkWell(
+          onTap: isEnabled ? onTap : null,
+          borderRadius: AppRadius.brBase,
+          child: Container(
+            height: 64,
+            decoration: BoxDecoration(
+              border: Border.all(color: color, width: 2),
+              borderRadius: AppRadius.brBase,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: color, size: 24),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  style: context.typography.labelSm.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 11,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -550,7 +522,7 @@ class _StepsChecklist extends StatelessWidget {
       return Text(
         'No steps assigned to this job.',
         style: context.typography.bodyMd.copyWith(
-                    color: context.colors.onSurfaceVariant,
+          color: context.colors.onSurfaceVariant,
         ),
       );
     }
@@ -600,6 +572,130 @@ class _StepsChecklist extends StatelessWidget {
   }
 }
 
+class _EstimatesSection extends StatelessWidget {
+  const _EstimatesSection({required this.job, required this.onAddEstimate});
+
+  final Job job;
+  final VoidCallback onAddEstimate;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Additional Estimates',
+              style: context.typography.titleSm.copyWith(
+                fontSize: 18,
+                color: context.colors.onSurface,
+              ),
+            ),
+            TextButton.icon(
+              onPressed: onAddEstimate,
+              icon: const Icon(Icons.add_circle_outline),
+              label: const Text('Add'),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.stackSm),
+        if (job.estimates.isEmpty)
+          Text(
+            'No additional estimates added.',
+            style: context.typography.bodyMd.copyWith(
+              color: context.colors.onSurfaceVariant,
+            ),
+          )
+        else
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: AppRadius.brLg,
+              side: BorderSide(color: context.colors.outlineVariant),
+            ),
+            child: ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: job.estimates.length,
+              separatorBuilder: (context, index) => Divider(
+                height: 1,
+                thickness: 1,
+                color: context.colors.outlineVariant.withValues(alpha: 0.8),
+              ),
+              itemBuilder: (context, index) {
+                final est = job.estimates[index];
+                return ListTile(
+                  title: Text(est.name, style: context.typography.bodyMd.copyWith(fontWeight: FontWeight.w600)),
+                  trailing: Text('\$${est.amount.toStringAsFixed(2)}', style: context.typography.bodyMd),
+                );
+              },
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _TechnicianNotesSection extends StatefulWidget {
+  const _TechnicianNotesSection({required this.initialNotes, required this.onNotesChanged});
+
+  final String initialNotes;
+  final ValueChanged<String> onNotesChanged;
+
+  @override
+  State<_TechnicianNotesSection> createState() => _TechnicianNotesSectionState();
+}
+
+class _TechnicianNotesSectionState extends State<_TechnicianNotesSection> {
+  late TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialNotes);
+  }
+
+  @override
+  void didUpdateWidget(_TechnicianNotesSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialNotes != oldWidget.initialNotes && _controller.text != widget.initialNotes) {
+      _controller.text = widget.initialNotes;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Internal Technician Notes',
+          style: context.typography.titleSm.copyWith(
+            fontSize: 18,
+            color: context.colors.onSurface,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.gutter),
+        CustomTextField(
+          controller: _controller,
+          hint: 'Type or dictate internal memos here...',
+          minLines: 3,
+          maxLines: 6,
+          onChanged: widget.onNotesChanged,
+        ),
+      ],
+    );
+  }
+}
+
 class _HistorySection extends StatelessWidget {
   const _HistorySection({required this.history});
 
@@ -635,8 +731,8 @@ class _HistorySection extends StatelessWidget {
             itemBuilder: (context, index) {
               final entry = history[index];
               final time =
-                  '${entry.timestamp.hour.toString().padLeft(2, '0')}:'
-                  '${entry.timestamp.minute.toString().padLeft(2, '0')}';
+                  ':'
+                  '';
               return ListTile(
                 minVerticalPadding: 12,
                 leading: Icon(

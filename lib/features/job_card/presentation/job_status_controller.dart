@@ -23,6 +23,7 @@ class JobStatusController extends ChangeNotifier {
   bool _isLoading = false;
   StreamSubscription<Duration>? _timerSubscription;
   Duration _elapsed = Duration.zero;
+  Timer? _notesDebounce;
 
   Job get job => _job;
   bool get isLoading => _isLoading;
@@ -225,8 +226,43 @@ class JobStatusController extends ChangeNotifier {
     }
   }
 
+  Future<void> addEstimate(JobService estimate) async {
+    final updatedEstimates = [..._job.estimates, estimate];
+    _job = _job.copyWith(estimates: updatedEstimates);
+    notifyListeners();
+
+    _setLoading(true);
+    try {
+      await _repository.addEstimateToJob(_job.id, estimate);
+    } catch (e) {
+      final revertedEstimates = _job.estimates.where((e) => e.id != estimate.id).toList();
+      _job = _job.copyWith(estimates: revertedEstimates);
+      notifyListeners();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  void updateNotes(String notes) {
+    if (_job.technicianNotes == notes) return;
+    
+    _job = _job.copyWith(technicianNotes: notes);
+    notifyListeners();
+
+    _notesDebounce?.cancel();
+    _notesDebounce = Timer(const Duration(milliseconds: 1000), () async {
+      try {
+        await _repository.updateTechnicianNotes(_job.id, notes);
+      } catch (e) {
+        debugPrint('Failed to sync technician notes: $e');
+      }
+    });
+  }
+
   @override
   void dispose() {
+    _notesDebounce?.cancel();
     _stopTimer();
     _elapsedController.close();
     super.dispose();

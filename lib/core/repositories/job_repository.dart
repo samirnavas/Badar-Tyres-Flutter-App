@@ -173,6 +173,11 @@ class JobRepository {
     return data.map((e) => Vehicle.fromJson(e)).toList();
   }
 
+  Future<List<String>> fetchBays() async {
+    final data = await _supabase.from('bays').select('name').order('name');
+    return data.map((e) => e['name'] as String).toList();
+  }
+
   Future<Job> fetchJob(String id) async {
     final data = await _supabase
         .from('jobs')
@@ -306,6 +311,41 @@ class JobRepository {
     final data =
         await _supabase.from('jobs').insert(payload).select().single();
     return Job.fromJson(data);
+  }
+
+  Future<void> addEstimateToJob(String jobId, JobService estimate) async {
+    final job = await fetchJob(jobId);
+    final updatedEstimates = [...job.estimates, estimate];
+
+    await _syncManager.updateJobInCache(jobId, (cached) {
+      return cached.copyWith(estimates: updatedEstimates);
+    });
+
+    try {
+      await _supabase
+          .from('jobs')
+          .update({'estimates': updatedEstimates.map((e) => e.toJson()).toList()})
+          .eq('id', jobId)
+          .eq('technician_id', _userId);
+    } catch (e) {
+      throw Exception('Failed to add estimate: $e');
+    }
+  }
+
+  Future<void> updateTechnicianNotes(String jobId, String notes) async {
+    await _syncManager.updateJobInCache(jobId, (cached) {
+      return cached.copyWith(technicianNotes: notes);
+    });
+
+    try {
+      await _supabase
+          .from('jobs')
+          .update({'technician_notes': notes})
+          .eq('id', jobId)
+          .eq('technician_id', _userId);
+    } catch (e) {
+      throw Exception('Failed to update notes: $e');
+    }
   }
 
   void dispose() {}

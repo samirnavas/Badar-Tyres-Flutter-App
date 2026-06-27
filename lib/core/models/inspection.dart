@@ -2,14 +2,14 @@ class InspectionItem {
   final String system;
   final String condition;
   final String notes;
-  final List<String> photoUrls;
+  final List<String> evidencePhotos;
   final bool isChecked;
 
   InspectionItem({
     required this.system,
     required this.condition,
     required this.notes,
-    this.photoUrls = const [],
+    this.evidencePhotos = const [],
     this.isChecked = false,
   });
 
@@ -18,7 +18,7 @@ class InspectionItem {
       system: json['system'] as String? ?? '',
       condition: json['condition'] as String? ?? 'Pending',
       notes: json['notes'] as String? ?? '',
-      photoUrls: (json['photoUrls'] as List<dynamic>? ?? [])
+      evidencePhotos: (json['evidencePhotos'] as List<dynamic>? ?? json['photoUrls'] as List<dynamic>? ?? [])
           .map((e) => e.toString())
           .toList(),
       isChecked: json['isChecked'] as bool? ?? false,
@@ -30,7 +30,7 @@ class InspectionItem {
       'system': system,
       'condition': condition,
       'notes': notes,
-      'photoUrls': photoUrls,
+      'evidencePhotos': evidencePhotos,
       'isChecked': isChecked,
     };
   }
@@ -39,14 +39,14 @@ class InspectionItem {
     String? system,
     String? condition,
     String? notes,
-    List<String>? photoUrls,
+    List<String>? evidencePhotos,
     bool? isChecked,
   }) {
     return InspectionItem(
       system: system ?? this.system,
       condition: condition ?? this.condition,
       notes: notes ?? this.notes,
-      photoUrls: photoUrls ?? this.photoUrls,
+      evidencePhotos: evidencePhotos ?? this.evidencePhotos,
       isChecked: isChecked ?? this.isChecked,
     );
   }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/theme/theme.dart';
 import '../../../core/widgets/workspace_header.dart';
@@ -8,7 +9,9 @@ import '../../../core/auth/session_store.dart';
 import '../../auth/presentation/login_screen.dart';
 import 'dashboard_overview_screen.dart';
 import 'more_screen.dart';
+import 'technician_workspace_screen.dart';
 import 'vehicles_screen.dart';
+import '../../bays/presentation/bay_status_screen.dart';
 import '../../settings/presentation/settings_screen.dart';
 
 /// The signed-in app shell. Owns M3 [NavigationBar] tab switching and the
@@ -27,7 +30,7 @@ class _HomeShellState extends State<HomeShell> {
   int _jobsRefreshTick = 0;
 
   static const _adminNavOrder = [0, 1, 3, 4];
-  static const _techNavOrder = [0, 1, 5];
+  static const _techNavOrder = [0, 1, 6, 5];
 
   List<int> get _navOrder {
     final isTech = SessionStore.currentUser?.role == 'Technician';
@@ -41,6 +44,7 @@ class _HomeShellState extends State<HomeShell> {
 
   void _onNavTap(int navIndex) {
     if (navIndex == _navIndex) return;
+    HapticFeedback.selectionClick();
     setState(() => _navIndex = navIndex);
   }
 
@@ -81,13 +85,17 @@ class _HomeShellState extends State<HomeShell> {
               child: IndexedStack(
                 index: _stackIndex,
                 children: [
-                  DashboardOverviewScreen(
-                    onCreateJob: _openCreateJob,
-                    onViewJobs: () => _onNavTap(1),
-                  ),
+                  if (isTech)
+                    const TechnicianWorkspaceScreen()
+                  else
+                    DashboardOverviewScreen(
+                      onCreateJob: _openCreateJob,
+                      onViewJobs: () => _onNavTap(1),
+                    ),
                   DashboardScreen(refreshTick: _jobsRefreshTick),
                   if (!isTech) const VehiclesScreen(),
                   if (!isTech) const MoreScreen(),
+                  if (isTech) const BayStatusScreen(),
                   if (isTech) const SettingsScreen(),
                 ],
               ),
@@ -109,6 +117,11 @@ class _HomeShellState extends State<HomeShell> {
                     icon: Icon(Icons.work_outline),
                     selectedIcon: Icon(Icons.work_rounded),
                     label: 'Jobs',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.grid_view_outlined),
+                    selectedIcon: Icon(Icons.grid_view_rounded),
+                    label: 'Bays',
                   ),
                   NavigationDestination(
                     icon: Icon(Icons.person_outline),

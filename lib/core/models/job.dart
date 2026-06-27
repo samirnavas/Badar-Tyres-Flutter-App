@@ -169,6 +169,8 @@ class Job {
     this.services = const [],
     this.steps = const [],
     this.history = const [],
+    this.estimates = const [],
+    this.technicianNotes = '',
     this.subTotal = 0,
     this.gst = 0,
     this.grandTotal = 0,
@@ -198,6 +200,8 @@ class Job {
   final List<JobService> services;
   final List<JobStep> steps;
   final List<JobHistoryEntry> history;
+  final List<JobService> estimates;
+  final String technicianNotes;
   final double subTotal;
   final double gst;
   final double grandTotal;
@@ -305,6 +309,12 @@ class Job {
           .toList()),
       steps: parsedSteps,
       history: parsedHistory,
+      estimates: (json['estimates'] as List<dynamic>? ?? [])
+          .map((e) => JobService.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
+      technicianNotes: json['technician_notes'] as String? ??
+          json['technicianNotes'] as String? ??
+          '',
       subTotal: (meta?['subtotal'] as num?)?.toDouble() ?? (json['sub_total'] as num?)?.toDouble() ?? (json['subTotal'] as num?)?.toDouble() ?? 0,
       gst: (meta?['total_tax'] as num?)?.toDouble() ?? (json['gst'] as num?)?.toDouble() ?? 0,
       grandTotal: (meta?['total_amount'] as num?)?.toDouble() ?? (json['grand_total'] as num?)?.toDouble() ?? (json['grandTotal'] as num?)?.toDouble() ?? 0,
@@ -335,6 +345,8 @@ class Job {
     List<JobService>? services,
     List<JobStep>? steps,
     List<JobHistoryEntry>? history,
+    List<JobService>? estimates,
+    String? technicianNotes,
     double? subTotal,
     double? gst,
     double? grandTotal,
@@ -364,6 +376,8 @@ class Job {
       services: services ?? this.services,
       steps: steps ?? this.steps,
       history: history ?? this.history,
+      estimates: estimates ?? this.estimates,
+      technicianNotes: technicianNotes ?? this.technicianNotes,
       subTotal: subTotal ?? this.subTotal,
       gst: gst ?? this.gst,
       grandTotal: grandTotal ?? this.grandTotal,
@@ -390,6 +404,8 @@ class Job {
         'services': services.map((e) => e.toJson()).toList(),
         'steps': steps.map((e) => e.toJson()).toList(),
         'history': history.map((e) => e.toJson()).toList(),
+        'estimates': estimates.map((e) => e.toJson()).toList(),
+        'technician_notes': technicianNotes,
         'sub_total': subTotal,
         'gst': gst,
         'grand_total': grandTotal,

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/theme.dart';
 import '../../../core/theme/theme_store.dart';
 import '../../../core/auth/session_store.dart';
-import '../../../core/widgets/user_job_analytics_section.dart';
+
 import '../../auth/presentation/login_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -98,9 +98,7 @@ class SettingsScreen extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: AppSpacing.stackLg),
-            const UserJobAnalyticsSection(),
-            const SizedBox(height: AppSpacing.stackLg),
+
           ],
           const Text('Appearance', style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: AppSpacing.stackMd),
