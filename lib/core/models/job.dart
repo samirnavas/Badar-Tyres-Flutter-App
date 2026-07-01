@@ -262,9 +262,16 @@ class Job {
     }
 
     final bays = json['bays'];
-    final parsedBayName = bays is Map
-        ? bays['name'] as String?
-        : json['bay_name'] as String? ?? json['bayName'] as String?;
+    String? parsedBayName;
+    if (bays is Map) {
+      parsedBayName = bays['bay_name'] as String? ?? bays['name'] as String? ?? bays['bayName'] as String?;
+    } else if (bays is List && bays.isNotEmpty) {
+      final first = bays.first;
+      if (first is Map) {
+        parsedBayName = first['bay_name'] as String? ?? first['name'] as String? ?? first['bayName'] as String?;
+      }
+    }
+    parsedBayName ??= json['bay_name'] as String? ?? json['bayName'] as String?;
 
     return Job(
       id: json['id']?.toString() ?? '',

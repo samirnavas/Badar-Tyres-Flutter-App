@@ -1,18 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/auth/session_store.dart';
+import '../../../core/constants/app_routes.dart';
 import '../../../core/theme/theme.dart';
 import '../../../core/widgets/workspace_header.dart';
-import '../../dashboard/presentation/dashboard_screen.dart';
-import '../../job_card/presentation/create_job_card_screen.dart';
-import '../../../core/auth/session_store.dart';
 import '../../auth/presentation/login_screen.dart';
-import 'dashboard_overview_screen.dart';
-import 'more_screen.dart';
-import 'technician_workspace_screen.dart';
-import 'vehicles_screen.dart';
-import '../../bays/presentation/bay_status_screen.dart';
-import '../../settings/presentation/settings_screen.dart';
+import '../../job_card/presentation/create_job_card_screen.dart';
+import 'shell_nav_config.dart';
 
 /// The signed-in app shell. Owns M3 [NavigationBar] tab switching and the
 /// admin "Create Job" FAB, swapping destinations via [IndexedStack].
@@ -25,141 +20,201 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
-  late int _navIndex = widget.initialIndex;
+class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
+  late ShellTab _selectedTab;
   int _jobsRefreshTick = 0;
 
-  static const _adminNavOrder = [0, 1, 3, 4];
-  static const _techNavOrder = [0, 1, 6, 5];
-
-  List<int> get _navOrder {
-    final isTech = SessionStore.currentUser?.role == 'Technician';
-    return isTech ? _techNavOrder : _adminNavOrder;
+  ShellNavConfig get _navConfig {
+    final user = SessionStore.currentUser!;
+    return ShellNavConfig.fromUser(
+      user,
+      onCreateJob: _openCreateJob,
+      onViewJobs: _openJobsTab,
+      onRefreshPermissions: _refreshPermissions,
+      jobsRefreshTick: _jobsRefreshTick,
+    );
   }
 
-  int get _stackIndex {
-    final index = _navOrder.indexOf(_navIndex);
-    return index == -1 ? 0 : index;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _selectedTab = _tabForInitialIndex(widget.initialIndex);
+    _refreshPermissions();
   }
 
-  void _onNavTap(int navIndex) {
-    if (navIndex == _navIndex) return;
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshPermissions();
+    }
+  }
+
+  ShellTab _tabForInitialIndex(int index) {
+    final items = _navConfig.items;
+    if (items.isEmpty) return ShellTab.dashboard;
+    if (index < 0 || index >= items.length) return items.first.tab;
+    return items[index].tab;
+  }
+
+  void _reconcileSelectedTab() {
+    final items = _navConfig.items;
+    if (items.isEmpty) return;
+    if (_navConfig.indexForTab(_selectedTab) == -1) {
+      _selectedTab = items.first.tab;
+    }
+  }
+
+  Future<void> _refreshPermissions() async {
+    try {
+      await SessionStore.instance.refreshPermissions();
+    } catch (_) {
+      // Keep the cached session if the network request fails.
+    }
+    if (!mounted) return;
+    _reconcileSelectedTab();
+    setState(() {});
+  }
+
+  void _openJobsTab() {
+    if (_navConfig.indexForRoute(AppRoutes.jobs) == null) return;
+    _onNavTap(ShellTab.jobs);
+  }
+
+  void _onNavTap(ShellTab tab) {
+    if (tab == _selectedTab) return;
     HapticFeedback.selectionClick();
-    setState(() => _navIndex = navIndex);
+    setState(() => _selectedTab = tab);
   }
 
   Future<void> _openCreateJob() async {
+    final user = SessionStore.currentUser;
+    if (user == null || !user.canAccess(AppRoutes.jobs)) return;
+
     final created = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => const CreateJobCardScreen()),
     );
     if (created == true && mounted) {
       setState(() {
         _jobsRefreshTick++;
-        _navIndex = 1;
+        if (_navConfig.indexForRoute(AppRoutes.jobs) != null) {
+          _selectedTab = ShellTab.jobs;
+        }
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final user = SessionStore.currentUser;
-    if (user == null) {
-      return const LoginScreen();
-    }
+    return ListenableBuilder(
+      listenable: SessionStore.instance,
+      builder: (context, _) {
+        final user = SessionStore.currentUser;
+        if (user == null) {
+          return const LoginScreen();
+        }
 
-    final isTech = user.role == 'Technician';
-
-    return PopScope(
-      canPop: _navIndex == 0,
-      onPopInvokedWithResult: (didPop, result) {
-        if (didPop) return;
-        setState(() => _navIndex = 0);
-      },
-      child: Scaffold(
-        backgroundColor: context.colors.surface,
-        body: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (isTech) WorkspaceHeader(userName: user.name),
-            Expanded(
-              child: IndexedStack(
-                index: _stackIndex,
-                children: [
-                  if (isTech)
-                    const TechnicianWorkspaceScreen()
-                  else
-                    DashboardOverviewScreen(
-                      onCreateJob: _openCreateJob,
-                      onViewJobs: () => _onNavTap(1),
+        final navConfig = _navConfig;
+        if (navConfig.items.isEmpty) {
+          return Scaffold(
+            backgroundColor: context.colors.surface,
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.containerPadding),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.lock_outline,
+                      size: 48,
+                      color: context.colors.onSurfaceVariant,
                     ),
-                  DashboardScreen(refreshTick: _jobsRefreshTick),
-                  if (!isTech) const VehiclesScreen(),
-                  if (!isTech) const MoreScreen(),
-                  if (isTech) const BayStatusScreen(),
-                  if (isTech) const SettingsScreen(),
-                ],
+                    const SizedBox(height: AppSpacing.stackMd),
+                    Text(
+                      'No mobile access',
+                      style: context.typography.titleSm,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: AppSpacing.base),
+                    Text(
+                      'Your role does not have any routes assigned for the mobile app. '
+                      'Contact an administrator.',
+                      style: context.typography.bodyMd.copyWith(
+                        color: context.colors.secondary,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
               ),
             ),
-          ],
-        ),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _stackIndex,
-          onDestinationSelected: (index) => _onNavTap(_navOrder[index]),
-          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-          destinations: isTech
-              ? const [
-                  NavigationDestination(
-                    icon: Icon(Icons.home_outlined),
-                    selectedIcon: Icon(Icons.home_rounded),
-                    label: 'Workspace',
+          );
+        }
+
+        var activeTab = _selectedTab;
+        if (navConfig.indexForTab(activeTab) == -1) {
+          activeTab = navConfig.items.first.tab;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _selectedTab != activeTab) {
+              setState(() => _selectedTab = activeTab);
+            }
+          });
+        }
+
+        final safeIndex =
+            navConfig.indexForTab(activeTab).clamp(0, navConfig.items.length - 1);
+
+        return PopScope(
+          canPop: safeIndex == 0,
+          onPopInvokedWithResult: (didPop, result) {
+            if (didPop) return;
+            setState(() => _selectedTab = navConfig.items.first.tab);
+          },
+          child: Scaffold(
+            backgroundColor: context.colors.surface,
+            body: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (navConfig.showWorkspaceHeader)
+                  WorkspaceHeader(
+                    userName: user.name,
+                    onSyncTap: _refreshPermissions,
                   ),
-                  NavigationDestination(
-                    icon: Icon(Icons.work_outline),
-                    selectedIcon: Icon(Icons.work_rounded),
-                    label: 'Jobs',
+                Expanded(
+                  child: IndexedStack(
+                    index: safeIndex,
+                    children: [
+                      for (final item in navConfig.items) item.screen,
+                    ],
                   ),
-                  NavigationDestination(
-                    icon: Icon(Icons.grid_view_outlined),
-                    selectedIcon: Icon(Icons.grid_view_rounded),
-                    label: 'Bays',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.person_outline),
-                    selectedIcon: Icon(Icons.person_rounded),
-                    label: 'Profile',
-                  ),
-                ]
-              : const [
-                  NavigationDestination(
-                    icon: Icon(Icons.home_outlined),
-                    selectedIcon: Icon(Icons.home_rounded),
-                    label: 'Dashboard',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.work_outline),
-                    selectedIcon: Icon(Icons.work_rounded),
-                    label: 'Jobs',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.directions_car_outlined),
-                    selectedIcon: Icon(Icons.directions_car_rounded),
-                    label: 'Vehicles',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.menu),
-                    selectedIcon: Icon(Icons.menu_open_rounded),
-                    label: 'More',
-                  ),
-                ],
-        ),
-        floatingActionButton: isTech
-            ? null
-            : FloatingActionButton(
-                onPressed: _openCreateJob,
-                tooltip: 'Create Job',
-                child: const Icon(Icons.add),
-              ),
-      ),
+                ),
+              ],
+            ),
+            bottomNavigationBar: NavigationBar(
+              selectedIndex: safeIndex,
+              onDestinationSelected: (index) =>
+                  _onNavTap(navConfig.items[index].tab),
+              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+              destinations: [
+                for (final item in navConfig.items) item.destination,
+              ],
+            ),
+            floatingActionButton: navConfig.showCreateJobFab
+                ? FloatingActionButton(
+                    onPressed: _openCreateJob,
+                    tooltip: 'Create Job',
+                    child: const Icon(Icons.add),
+                  )
+                : null,
+          ),
+        );
+      },
     );
   }
 }

@@ -83,7 +83,7 @@ class JobRepository {
       var query = _supabase
           .from('jobs')
           .select(
-            '*, vehicles(*, customers(first_name, last_name, phone)), bays(name)',
+            '*, vehicles(*, customers(first_name, last_name, phone)), bays(*)',
           );
 
       if (assignedToCurrentUserOnly) {
@@ -96,7 +96,19 @@ class JobRepository {
       }
 
       final data = await query;
-      var jobs = data.map((e) => Job.fromJson(e)).toList();
+      final usersData = await _supabase.from('users').select('id, name');
+      final usersMap = {for (var e in usersData) e['id']?.toString(): e['name']?.toString()};
+
+      var jobs = data.map((e) {
+        var job = Job.fromJson(e);
+        if (job.technician.length >= 32) {
+           final matchedName = usersMap[job.technician];
+           if (matchedName != null && matchedName.isNotEmpty) {
+             job = job.copyWith(technician: matchedName);
+           }
+        }
+        return job;
+      }).toList();
 
       if (search.isNotEmpty) {
         final needle = search.toLowerCase();
@@ -174,18 +186,47 @@ class JobRepository {
   }
 
   Future<List<String>> fetchBays() async {
-    final data = await _supabase.from('bays').select('name').order('name');
-    return data.map((e) => e['name'] as String).toList();
+    var data = <Map<String, dynamic>>[];
+    try {
+      final res1 = await _supabase.from('bays').select();
+      data.addAll(List<Map<String, dynamic>>.from(res1));
+    } catch (_) {}
+    
+    try {
+      final res2 = await _supabase.from('bay').select();
+      data.addAll(List<Map<String, dynamic>>.from(res2));
+    } catch (_) {}
+
+    final names = data
+        .map((e) => (e['bay_name'] ?? e['name'] ?? e['bayName']?.toString() ?? ''))
+        .where((e) => e.toString().trim().isNotEmpty)
+        .map((e) => e.toString().trim())
+        .toList();
+    
+    // Remove duplicates
+    final uniqueNames = names.toSet().toList();
+    uniqueNames.sort();
+    return uniqueNames;
   }
 
   Future<Job> fetchJob(String id) async {
     final data = await _supabase
         .from('jobs')
-        .select('*, vehicles(*, customers(first_name, last_name, phone)), bays(name)')
+        .select('*, vehicles(*, customers(first_name, last_name, phone)), bays(*)')
         .eq('id', id)
         .eq('technician_id', _userId)
         .single();
-    return Job.fromJson(data);
+    
+    var job = Job.fromJson(data);
+    if (job.technician.length >= 32) {
+      final usersData = await _supabase.from('users').select('id, name');
+      final usersMap = {for (var e in usersData) e['id']?.toString(): e['name']?.toString()};
+      final matchedName = usersMap[job.technician];
+      if (matchedName != null && matchedName.isNotEmpty) {
+        job = job.copyWith(technician: matchedName);
+      }
+    }
+    return job;
   }
 
   Future<void> updateJobStatus(

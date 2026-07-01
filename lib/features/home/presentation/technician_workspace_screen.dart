@@ -142,10 +142,13 @@ class _TechnicianWorkspaceScreenState extends State<TechnicianWorkspaceScreen> {
     return delay > 0;
   }
 
-  void _openJob(Job job) {
-    Navigator.of(context).push(
+  Future<void> _openJob(Job job) async {
+    await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => JobExecutionScreen(job: job)),
     );
+    if (mounted) {
+      _loadJobs();
+    }
   }
 
   @override

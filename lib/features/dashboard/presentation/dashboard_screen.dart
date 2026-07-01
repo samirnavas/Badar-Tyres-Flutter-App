@@ -174,7 +174,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   @override
   Widget build(BuildContext context) {
-    final isTech = SessionStore.currentUser?.role == 'Technician';
+    final isTech = SessionStore.currentUser?.isTechnician ?? false;
     final colors = context.colors;
 
     return Scaffold(
@@ -338,6 +338,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         );
         if (context.mounted) {
           FocusManager.instance.primaryFocus?.unfocus();
+          _loadJobs();
         }
       },
       onStatusChange: (newStatus) => _handleStatusChange(j, newStatus),

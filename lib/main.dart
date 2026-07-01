@@ -28,6 +28,9 @@ Future<void> main() async {
 
   await ThemeStore.instance.init();
   final rememberedUser = await SessionStore.instance.loadCurrentUser();
+  if (rememberedUser != null) {
+    await SessionStore.instance.refreshPermissions();
+  }
   runApp(MyApp(startLoggedIn: rememberedUser != null));
 }
 

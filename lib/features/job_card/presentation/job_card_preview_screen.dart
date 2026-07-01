@@ -5,6 +5,7 @@ import '../../../core/models/job.dart';
 import '../../../core/repositories/job_repository.dart';
 import '../../../core/theme/theme.dart';
 import '../../../core/widgets/custom_text_field.dart';
+import '../../../core/widgets/red_button.dart';
 import '../../inspections/presentation/dvi_checklist_screen.dart';
 import 'job_status_controller.dart';
 
@@ -381,95 +382,67 @@ class _ActionSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _ActionButton(
-            label: 'Start Job',
-            icon: Icons.play_arrow_rounded,
-            color: AppStatusColors.running,
-            isEnabled: !isLoading && (job.status == JobStatus.pending || job.status == JobStatus.onHold),
-            onTap: onStart,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _ActionButton(
-            label: 'Pause Job',
-            icon: Icons.pause_rounded,
-            color: AppStatusColors.pending,
-            isEnabled: !isLoading && job.status == JobStatus.inProgress,
-            onTap: onPause,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _ActionButton(
-            label: 'Complete',
-            icon: Icons.check_rounded,
-            color: AppStatusColors.completed,
-            isEnabled: !isLoading && job.status == JobStatus.inProgress,
-            onTap: onComplete,
-          ),
-        ),
-      ],
-    );
-  }
-}
+    if (job.status == JobStatus.pending || job.status == JobStatus.onHold) {
+      return RedButton(
+        label: job.status == JobStatus.onHold ? 'Resume Job' : 'Start Job',
+        icon: Icons.play_arrow_rounded,
+        isLoading: isLoading,
+        onPressed: onStart,
+      );
+    }
 
-class _ActionButton extends StatelessWidget {
-  const _ActionButton({
-    required this.label,
-    required this.icon,
-    required this.color,
-    required this.isEnabled,
-    required this.onTap,
-  });
+    if (job.status == JobStatus.inProgress) {
+      return Row(
+        children: [
+          Expanded(
+            child: RedButton.outlined(
+              label: 'Pause',
+              icon: Icons.pause_rounded,
+              isLoading: isLoading,
+              onPressed: onPause,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: RedButton(
+              label: 'Complete Job',
+              icon: Icons.check_rounded,
+              isLoading: isLoading,
+              onPressed: onComplete,
+            ),
+          ),
+        ],
+      );
+    }
 
-  final String label;
-  final IconData icon;
-  final Color color;
-  final bool isEnabled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Opacity(
-      opacity: isEnabled ? 1.0 : 0.5,
-      child: Material(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: AppRadius.brBase,
-        child: InkWell(
-          onTap: isEnabled ? onTap : null,
+    if (job.status == JobStatus.completed) {
+      final color = AppStatusColors.completed;
+      return Container(
+        height: 52,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          border: Border.all(color: color),
           borderRadius: AppRadius.brBase,
-          child: Container(
-            height: 64,
-            decoration: BoxDecoration(
-              border: Border.all(color: color, width: 2),
-              borderRadius: AppRadius.brBase,
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 2),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, color: color, size: 24),
-                const SizedBox(height: 2),
-                Text(
-                  label,
-                  style: context.typography.labelSm.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 11,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
         ),
-      ),
-    );
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.verified_rounded, color: color, size: 24),
+            const SizedBox(width: 8),
+            Text(
+              'JOB COMPLETED',
+              style: context.typography.titleSm.copyWith(
+                color: color,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
   }
 }
 

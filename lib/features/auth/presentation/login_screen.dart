@@ -66,10 +66,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
 
-      if (user.role == 'admin') {
-        // Block admin entry
+      if (user.isAdminRole) {
         setState(() => _isLoading = false);
-        // We should also sign out from Supabase since they shouldn't be logged in here
         try {
           await Supabase.instance.client.auth.signOut();
         } catch (_) {}
